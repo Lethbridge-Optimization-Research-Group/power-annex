@@ -7,6 +7,14 @@ This module contains various Julia functions useful for many projects.
 read_case.jl
   : provides a function to read cases and return the reference dictionary with all the needed network model components computed by powermodels-annex. It is a common/general file.
 
+clear_screen.jl
+  : provides both **clear()** and **@clear** which wipe a terminal for convenience.
+
+rampingCSVimplementationAC/DC.jl
+  : 
+  - primarily these provide **parse_power_system_csv** and **parse_ac_power_system_csv** which read any of our generated demand/ramp limit files and return the dictionary ramping_data, as well as a vector 'demands'. Which both are indexed by individual bus/gen IDs.
+  - secondarily provides **generate_power_system_csv**, and **generate_power_system_csv_AC** which use the other helper functions in the files to make random variations on real demand curves over a given number of hours (usually 24), as well as ramp limits based on a random amount from 9-10% of the max power output of any given generator. These return the relative file path for the generated data based on a provided output directory.
+
 # ref[] dictionary
 
 The following keys are defined for the reference dictionary after reading a case.

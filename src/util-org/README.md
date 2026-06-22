@@ -13,7 +13,9 @@ clear_screen.jl
 rampingCSVimplementationAC/DC.jl
   : 
   - primarily these provide **parse_power_system_csv** and **parse_ac_power_system_csv** which read any of our generated demand/ramp limit files and return the dictionary ramping_data, as well as a vector 'demands'. Which both are indexed by individual bus/gen IDs.
-  - secondarily provides **generate_power_system_csv**, and **generate_power_system_csv_AC** which use the other helper functions in the files to make random variations on real demand curves over a given number of hours (usually 24), as well as ramp limits based on a random amount from 9-10% of the max power output of any given generator. These return the relative file path for the generated data based on a provided output directory.
+  - secondarily provides **generate_power_system_csv**, and **generate_power_system_csv_AC** which use the other helper functions in the files to make random variations on real demand curves over a given number of hours (usually 24), as well as ramp limits based on a random amount from 9-10% of the max power output of any given generator. These return the relative file path for the generated data based on a provided output directory. 
+  
+  It should be noted that DC also has a function **generate_daily_demand_csv** which works similarly to generate_power_system_csv but the demands will adhere more strictly to a realistic preset demand profile. Also consider that all of these functions make use of rand.seed() in them, sometimes at multiple steps. so if desired, one can modify this seed to change only the demands or ramp limits and costs separately. If not modified, the functions will reproduce the same csv repeatedly. 
 
 # ref[] dictionary
 

@@ -49,7 +49,7 @@ end
 
 function generate_power_system_csv(data::Dict, output_dir::String, num_periods::Int=24)
     
-    Random.seed!(42)
+    Random.seed!(42)  # Implement a seed for reproducability, this will only affect ramp limits and ramp costs
     
     # Extract case name
     case_name = basename(data["name"])
@@ -60,9 +60,12 @@ function generate_power_system_csv(data::Dict, output_dir::String, num_periods::
 
     # Extract generator data
     gen_data = []
+    total_generation_capacity = 0.0
     for (_, gen) in data["gen"]
         # Calculate ramping limit as percentage of generator output
         pmax = get(gen, "pmax", 0.0)
+        total_generation_capacity += pmax
+
         ramp_percent = rand(50:100)  # Random percentage between 5% and 50%
         ramp_limit = pmax * (ramp_percent / 100)
         
@@ -79,6 +82,15 @@ function generate_power_system_csv(data::Dict, output_dir::String, num_periods::
 
     # Extract initial bus demands
     demand_dict = Dict{Int, Float64}()
+    bus_ids = Int[]  # Store actual bus IDs in order
+
+    # First, collect all bus IDs from the bus data
+    for (_, bus) in data["bus"]
+        push!(bus_ids, bus["bus_i"])
+    end
+    sort!(bus_ids)  # Ensure buses are in order
+
+    total_initial_demand = 0.0
     for (_, load) in data["load"]
         bus_id = load["load_bus"]
         pd = get(load, "pd", 0.0)
@@ -124,7 +136,7 @@ function generate_power_system_csv(data::Dict, output_dir::String, num_periods::
         print(csv_content, ",T$i")
     end
     println(csv_content)
-    for bus in 1:num_buses
+    for bus in 1:length(bus_ids)
         print(csv_content, bus)
         for period in 1:num_periods
             print(csv_content, ",", round(demands[period][bus], digits=3))
@@ -143,8 +155,7 @@ function generate_power_system_csv(data::Dict, output_dir::String, num_periods::
     return output_file
 end
 
-function generate_daily_demand_profile(base_demand::Float64, hour::Int)
-    """
+"""
     Generate realistic demand multiplier based on hour of day (1-24)
     Hour 1 = midnight, Hour 24 = 11 PM
     
@@ -154,8 +165,8 @@ function generate_daily_demand_profile(base_demand::Float64, hour::Int)
     - Midday: 9 AM-2 PM (0.8-0.9x base)
     - Afternoon/Evening peak: 2-8 PM (0.9-1.0x base)
     - Evening decline: 8 PM-midnight (1.0-0.6x base)
-    """
-    
+"""
+function generate_daily_demand_profile(base_demand::Float64, hour::Int)
     Random.seed!(42)
 
     hourly_demand_multipliers = [

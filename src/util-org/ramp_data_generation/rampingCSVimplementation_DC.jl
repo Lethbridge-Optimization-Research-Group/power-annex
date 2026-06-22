@@ -128,7 +128,8 @@ function generate_power_system_csv(data::Dict, output_dir::String, num_periods::
     println(csv_content, "#gen_data")
     println(csv_content, "gen_id,ramp_limits,costs")
     for (index, ramp, cost) in gen_data
-        println(csv_content, "$index,$ramp,$cost")
+        rramp = round(ramp, digits=3)
+        println(csv_content, "$index,$rramp,$cost")
     end
     println(csv_content, "#bus_data")
     print(csv_content, "bus_id")

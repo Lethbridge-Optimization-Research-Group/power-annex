@@ -11,7 +11,7 @@ After making the factory, we need to gather demand data and ramping constraint d
 - PowerModels.standardize_cost_terms!(dict)
 - PwerModels.calc_thermal_limits!(dict)
 
-Now that our data (a dictionary) has been initialized, we can generate a demand profile on it. Note that the hourly demand multipliers referenced below is just a vector of ratios modeling the desired demand curve over our time periods. Ex. For 4 time periods, we could input [1.0, 0.96, 0.98, 1.04]. Typically there shouldn't be massive deviations greater than about 0.08, but that's up to the user's discretion.
+Now that our data (a dictionary) has been initialized, we can generate a demand profile on it. Note that the hourly demand multipliers referenced below is just a vector of ratios modeling the desired demand curve over our time periods. Ex. For 4 time periods, we could input [1.0, 0.96, 0.98, 1.04].
 
 A function to make this demand curve should be explored in the future.
 

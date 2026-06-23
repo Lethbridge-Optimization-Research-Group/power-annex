@@ -9,8 +9,23 @@ function safe_parse_float(s::AbstractString)
     end
 end
 
-# Do not leave cells blank, insert 0 for busses that don't demand power
+"""
+    parse_power_system_csv(file_path::String, matpower_file_path::String)
+
+Reads from a user-generated ramping CSV file, and returns the given ramping data and active demands as a dict and vector respectively.
+
+# Arguments
+- `file_path`: Path to the CSV file to be read
+- `matpower_file_path`: Path to the corresponding MATPOWER file (used for verification)
+
+# Returns
+- `ramping_data::Dict{String, Vector{Float64}}`: A dictionary containing generator IDs, ramp limits, and costs
+- `demands::Vector{Vector{Float64}}`: A vector of vectors, where each inner vector contains the active power demands for each
+    bus in a given time period. 
+"""
 function parse_power_system_csv(file_path::String, matpower_file_path::String)
+    # Do not leave cells blank, insert 0 for busses that don't demand power
+
     # Get CSV content, compare CSV case name with matpoewr case name
     csv_content = read(file_path, String)
     lines = split(csv_content, '\n')
@@ -47,6 +62,18 @@ function parse_power_system_csv(file_path::String, matpower_file_path::String)
     return ramping_data, demands
 end
 
+"""
+    generate_power_system_csv(data::Dict, output_dir::String, num_periods::Int=24)
+Generates a CSV file containing ramping data and active power demands for a given power system.
+
+# Arguments
+- `data::Dict`: Case-specific power system dictionary
+- `output_dir::String`: Path to the desired output folder
+- `num_periods::Int64`: Number of time periods to generate (default 24)
+
+# Returns
+- `output_file::String`: The path to the generated CSV file.
+"""
 function generate_power_system_csv(data::Dict, output_dir::String, num_periods::Int=24)
     
     Random.seed!(42)  # Implement a seed for reproducability, this will only affect ramp limits and ramp costs
@@ -157,15 +184,15 @@ function generate_power_system_csv(data::Dict, output_dir::String, num_periods::
 end
 
 """
-    Generate realistic demand multiplier based on hour of day (1-24)
-    Hour 1 = midnight, Hour 24 = 11 PM
-    
-    Typical daily pattern:
-    - Low demand: midnight to 6 AM (0.6-0.7x base)
-    - Morning ramp: 6-9 AM (0.7-0.9x base)
-    - Midday: 9 AM-2 PM (0.8-0.9x base)
-    - Afternoon/Evening peak: 2-8 PM (0.9-1.0x base)
-    - Evening decline: 8 PM-midnight (1.0-0.6x base)
+Generate realistic demand multiplier based on hour of day (1-24)
+Hour 1 = midnight, Hour 24 = 11 PM
+
+Typical daily pattern:
+- Low demand: midnight to 6 AM (0.6-0.7x base)
+- Morning ramp: 6-9 AM (0.7-0.9x base)
+- Midday: 9 AM-2 PM (0.8-0.9x base)
+- Afternoon/Evening peak: 2-8 PM (0.9-1.0x base)
+- Evening decline: 8 PM-midnight (1.0-0.6x base)
 """
 function generate_daily_demand_profile(base_demand::Float64, hour::Int)
     Random.seed!(42)

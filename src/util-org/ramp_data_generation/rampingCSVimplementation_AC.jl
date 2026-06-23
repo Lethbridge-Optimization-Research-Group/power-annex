@@ -1,5 +1,19 @@
 using CSV, DataFrames, Random
+"""
+        Parse_ac_power_system_csv(file_path::String, matpower_file_path::String)
+    Parameters:
+    - file_path: Path to the CSV file
+    - matpower_file_path: Path to the MATPOWER file (used for verification)
 
+    Return values:
+    - ramping_data::Dict{String, Any} A dictionary containing ramping information for each generator. 
+        Keys:
+        - "gen_id"::Int64
+        - "ramp_limits": Dict mapping gen_id to the respective ramp limit
+        - "costs": Dict mapping gen_id to its ramping cost
+    - active_demands::vector{Dict{Int,Float64}}: A vector containing active demands for each time period
+    - reactive_demands::vector{Dict{Int,Float64}}: A vector containing reactive demands for each time period
+"""
 function parse_ac_power_system_csv(file_path::String, matpower_file_path::String)
     csv_content = read(file_path, String)
     lines = split(csv_content, '\n')
@@ -97,15 +111,20 @@ function vector_to_power(magnitude::Float64, angle::Float64)
     return pd, qd
 end
 
-function perturb_power_vector(pd::Float64, qd::Float64, magnitude_multiplier::Float64, 
-                              angle_perturbation_deg::Float64; 
-                              min_pf::Float64=0.7, max_pf::Float64=0.98)
-    """
-    Modify power demand using vector approach:
+"""
+    Modify a single power demand using vector approach:
     - Scale magnitude by multiplier
     - Perturb angle by specified degrees
     - Constrain to realistic power factor range
-    """
+    - Return 0.0, 0.0 if given empty pd & qd, or
+      if result was flipped negative.
+    
+    Return values:
+    - pd, qd
+"""
+function perturb_power_vector(pd::Float64, qd::Float64, magnitude_multiplier::Float64, 
+                              angle_perturbation_deg::Float64; 
+                              min_pf::Float64=0.7, max_pf::Float64=0.98)
     
     # Handle zero load case
     if pd == 0.0 && qd == 0.0
@@ -137,11 +156,10 @@ function perturb_power_vector(pd::Float64, qd::Float64, magnitude_multiplier::Fl
     return max(0.0, new_pd), max(0.0, new_qd)
 end
 
-function generate_ac_vector_demand_profile(base_pd::Float64, base_qd::Float64, hour::Int, hourly_demand_multipliers;
-                                           peak_magnitude::Float64=1.0, min_magnitude::Float64=0.6,
-                                           max_angle_variation::Float64=10.0)
-    """
+"""
     Generate demand for a specific hour using vector perturbation approach
+    - Generated demands are seeded randomly based on the input hour, but will
+      be consistent for the same hour across runs.
     
     Parameters:
     - base_pd, base_qd: Base active and reactive power
@@ -149,7 +167,13 @@ function generate_ac_vector_demand_profile(base_pd::Float64, base_qd::Float64, h
     - peak_hour, min_hour: Hours of peak and minimum demand
     - peak_magnitude, min_magnitude: Multipliers for magnitude at peak and minimum
     - max_angle_variation: Maximum angle change in degrees from base
-    """
+
+    Return values:
+    - pd, qd, where pd and qd denote the real and imaginary power demands for the given hour.
+"""
+function generate_ac_vector_demand_profile(base_pd::Float64, base_qd::Float64, hour::Int, hourly_demand_multipliers;
+                                           peak_magnitude::Float64=1.0, min_magnitude::Float64=0.6,
+                                           max_angle_variation::Float64=10.0)
     Random.seed!(42 + hour)
     
 
@@ -178,12 +202,27 @@ function generate_ac_vector_demand_profile(base_pd::Float64, base_qd::Float64, h
     return perturb_power_vector(base_pd, base_qd, magnitude_multiplier, angle_perturbation)
 end
 
+"""
+    Generate AC multi-period demand using vector perturbation approach
+
+    Parameters:
+    - data: Dictionary containing power system data. 
+        This is not the same as the dict from build_ref, and has string indexing rather than symbols;
+        Uses "name" rather than :name.
+    - output_dir: Directory to save the generated CSV file
+    - hourly_demand_multipliers: Vector of multipliers for each hour (length should match num_periods)
+      This vector will model the demand curve of our generated data.
+    - num_periods: Number of time periods to generate (default 24)
+    - (optional) default_power_factor: A factor used to replace any missing reactive powers (default 0.85)
+    - (optional) capacity_safety_margin: Maximum percentage of total generation capacity that can be used for demand (default 0.95)
+
+    Return values:
+    - output_file the file path generated.
+
+"""
 function generate_ac_vector_demand_csv(data::Dict, output_dir::String, hourly_demand_multipliers, num_periods::Int=24;
                                        default_power_factor::Float64=0.85,
                                        capacity_safety_margin::Float64=0.95)
-    """
-    Generate AC multi-period demand using vector perturbation approach
-    """
     case_name = basename(data["name"])
     case_name = replace(case_name, ".m" => "")
     output_file = joinpath(output_dir, "$(case_name)_AC_rampingData.csv")
@@ -353,21 +392,25 @@ function generate_ac_vector_demand_csv(data::Dict, output_dir::String, hourly_de
     return output_file
 end
 
-# Convenience wrapper
-function generate_power_system_csv_AC(data::Dict, output_dir::String, num_periods::Int=24)
-    return generate_ac_vector_demand_csv(data, output_dir, num_periods)
+"""
+    A convenience wrapper that calls generate_ac_vector_demand_csv with the provided arguments.
+    - Does the same thing, but doesn't offer the optional arguments. Exists mainly to appeal to
+      the original DC function with a similar name.
+
+"""
+function generate_power_system_csv_AC(data::Dict, output_dir::String, hourly_demand_multipliers::Vector{Float64}, num_periods::Int=24)
+    return generate_ac_vector_demand_csv(data, output_dir, hourly_demand_multipliers, num_periods)
 end
 
-function plot_demand_curve(csv_file_path::String; plot_title::String="", save_path::String="")
-    """
+ """
     Plot the total active and reactive demand across all time periods
     
     Parameters:
     - csv_file_path: Path to the generated CSV file
     - plot_title: Optional custom title for the plot
     - save_path: Optional path to save the plot (if empty, just displays)
-    """
-    
+"""
+function plot_demand_curve(csv_file_path::String; plot_title::String="", save_path::String="")
     # Parse the CSV to extract demand data
     csv_content = read(csv_file_path, String)
     lines = split(csv_content, '\n')
@@ -457,9 +500,7 @@ function plot_demand_curve(csv_file_path::String; plot_title::String="", save_pa
     return final_plot
 end
 
-function plot_bus_power_scatter(csv_file_path::String, time_period::Int; 
-                                plot_title::String="", save_path::String="")
-    """
+"""
     Plot Pd vs Qd for all buses at a specific time period (like the scatter plot shown)
     
     Parameters:
@@ -467,8 +508,9 @@ function plot_bus_power_scatter(csv_file_path::String, time_period::Int;
     - time_period: Which time period to plot (1 to num_periods)
     - plot_title: Optional custom title
     - save_path: Optional path to save the plot
-    """
-
+"""
+function plot_bus_power_scatter(csv_file_path::String, time_period::Int; 
+                                plot_title::String="", save_path::String="")
     
     # Parse the CSV
     csv_content = read(csv_file_path, String)
@@ -533,10 +575,7 @@ function plot_bus_power_scatter(csv_file_path::String, time_period::Int;
     return p
 end
 
-function plot_bus_pq_vectors(csv_file_path::String, time_period::Int;
-                             plot_title::String="", save_path::String="",
-                             show_vectors::Bool=true)
-    """
+"""
     Plot Pd vs Qd as a scatter plot in P-Q space (Qd on y-axis, Pd on x-axis)
     Optionally show vectors from origin to demonstrate the vector approach
     
@@ -546,7 +585,10 @@ function plot_bus_pq_vectors(csv_file_path::String, time_period::Int;
     - plot_title: Optional custom title
     - save_path: Optional path to save the plot
     - show_vectors: If true, draw vectors from origin to each point
-    """
+"""
+function plot_bus_pq_vectors(csv_file_path::String, time_period::Int;
+                             plot_title::String="", save_path::String="",
+                             show_vectors::Bool=true)
     
     # Parse the CSV
     csv_content = read(csv_file_path, String)

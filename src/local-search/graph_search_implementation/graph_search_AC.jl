@@ -376,15 +376,15 @@ end
 
 Generate new AC scenarios by varying both active and reactive power outputs.
 """
-function generate_new_scenarios_subset_AC(data, current_active, current_reactive, search_parameters, time_period; 
+function generate_new_scenarios_subset_AC(current_active, current_reactive, search_parameters, time_period; 
                                          scenarios_to_generate=15,
                                          subset_percentage=0.3, 
                                          variation_percent=0.05,
                                          up_probability=0.3)
     
     data = search_parameters[:data]
-    core_generators = 0.2
-    auxiliary_generators = 0.1
+    core_generators = 0.2 # Generators that are common among all scenarios
+    auxiliary_generators = 0.1 # Exploratative generators that see change every scenario
 
     all_generators = collect(keys(current_active))
     n_generators = length(all_generators)
@@ -399,6 +399,7 @@ function generate_new_scenarios_subset_AC(data, current_active, current_reactive
     for scenario_idx in 1:scenarios_to_generate
         new_active = copy(current_active)
         new_reactive = copy(current_reactive)
+        # this set may intersect with our core generators???
         auxiliary_generators_to_modify = rand(all_generators, n_to_modify_auxiliary)
 
         variation_percent = delta_AC(scenario_idx, search_parameters, 1, time_period)
@@ -548,9 +549,18 @@ end
     delta_ac(scenario_idx, search_parameters, method_choice, time_period)
 
 Calculate variation factor for AC scenarios considering both active and reactive power demands.
+
+# Arguments
+- `search_parameters::Dict`: Helpful dictionary containing symbols that point to global data such as the iteration or our ref dictionary
+-  `method_choice::Int64`: Choose how to generate local search variations. (1 for stochastic/0.05, 2 for dynamic gap. 
+    Temporal smoothing hasn't been implemented here I see...)
+- `time_period::Int64`: Current scenario's time period (for accessing hourly demands)
+
+# Returns
+- `delta::Float64`: A small floating point number that influences how much generators get modified by
 """
-function delta_AC(scenario_idx, search_parameters, method_choice, time_period)
-    time_periods = length(search_parameters[:total_active_generation])
+function delta_AC(search_parameters::Dict, method_choice::Int64, time_period::Int64)
+    # time_periods = length(search_parameters[:total_active_generation]) this line is unnused
     
     if search_parameters[:iteration] < 5
         factor = 0.05
@@ -584,6 +594,14 @@ end
     find_largest_time_period_ac(time_periods, active_demands, reactive_demands)
 
 Find the time period with the highest combined active and reactive demand.
+
+# Arguments
+- `time_periods::Int64`: Number of time periods total
+- `active_demands::Vector{Vector{Float64}}`: All active demands over all time periods
+- `reactive_demands::Vector{Vector{Float64}}`: All reactive demands over all time periods
+
+# Returns
+- `largest_index::Int64`: A single integer representing the time period with the greatest demand
 """
 function find_largest_time_period_AC(time_periods, active_demands, reactive_demands)
     largest_index = -1
@@ -608,9 +626,22 @@ end
 """
     build_and_optimize_largest_period_ac(factory, active_demand, reactive_demand, ramping_data)
 
-Build and optimize an AC power flow model for the peak demand period.
+Build and optimize an AC power flow model for the peak demand period, setting a baseline for
+    generators, line flow and demands that we can build off of.
+
+# Arguments
+- `factory::AbstractMPOPFModelFactory`: The desired model factory, typically MPOPFSearchFactory
+- `active_demand::Vector{Float64}`: Demands for generators in the largest time period.
+- `reactive_demand::Vector{Float64}`: Same as above but for the imaginary portion
+- `ramping_data::Dict{String, Any}`: Dictionary containing ramp limits, ids and costs for generators in the Matpower case
+
+# Returns
+- `model::AbstractMPOPFModel`: An optimized model created from the provided factory and ramping/demand data
 """
 function build_and_optimize_largest_period_AC(factory, active_demand, reactive_demand, ramping_data)
+    # active_demand here is put into a container to create a 1 time period vector for model creation.
+    # don't pass active_demand or reactive_demand directly or create_search_model may access invalid space.
+    
     demands = [active_demand]  # Adjust based on your factory interface
     reactive_demands = [reactive_demand]
     

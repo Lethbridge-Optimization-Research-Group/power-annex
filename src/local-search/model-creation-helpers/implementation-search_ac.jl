@@ -1,4 +1,4 @@
-function set_model_variables!(power_flow_model::AbstractMPOPFModel, factory::ACMPOPFSearchFactory)
+function set_model_variables!(power_flow_model::ACMPOPFSearchModel)
     model = power_flow_model.model
     T = power_flow_model.time_periods
     ref = PowerModels.build_ref(power_flow_model.data)[:it][:pm][:nw][0]
@@ -17,7 +17,7 @@ function set_model_variables!(power_flow_model::AbstractMPOPFModel, factory::ACM
     @variable(model, 0 <= ramp_down[t in 2:T, g in keys(gen_data)] <= ramp_data[g])
 end
 
-function set_model_objective_function!(power_flow_model::AbstractMPOPFModel, factory::ACMPOPFSearchFactory)
+function set_model_objective_function!(power_flow_model::ACMPOPFSearchModel)
     model = power_flow_model.model
     data = power_flow_model.data
     T = power_flow_model.time_periods
@@ -33,7 +33,7 @@ function set_model_objective_function!(power_flow_model::AbstractMPOPFModel, fac
     )
 end
 
-function set_model_constraints!(power_flow_model::AbstractMPOPFModel, factory::ACMPOPFSearchFactory)
+function set_model_constraints!(power_flow_model::ACMPOPFSearchModel)
     model = power_flow_model.model
     data = power_flow_model.data
     T = power_flow_model.time_periods

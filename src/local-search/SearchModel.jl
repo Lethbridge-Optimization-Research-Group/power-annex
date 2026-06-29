@@ -1,6 +1,5 @@
 
 module SearchModel
-
     using CSV, DataFrames, Random
     using PowerModels, JuMP, Dates, Serialization, PlotlyJS, Ipopt, Graphs
     using Distributions, Statistics
@@ -13,23 +12,24 @@ module SearchModel
             plot_demand_curve, plot_bus_power_scatter, plot_bus_pq_vectors
 
     # Export of this file
-    export create_search_model, create_search_model_AC, optimize_model, DCMPOPFSearchFactory, ACMPOPFSearchFactory
+    export create_search_model, optimize_model, DCMPOPFSearchFactory, ACMPOPFSearchFactory
 
     ###########################################################################
     # Model Factories
     ###########################################################################
     """
-        AbstractMPOPFModelFactory
-    An abstract type serving as a base for all MPOPF model factories,
-    which contains both the file path and optimizer.
+    AbstractMPOPFModelFactory
+
+    An abstract type serving as a base for all MPOPF model factories, which contains both the file path and optimizer. 
+    The type used tells create_search_model which method to use to make an AC/DC model.
     """
     abstract type AbstractMPOPFModelFactory end
-
+    
     mutable struct DCMPOPFSearchFactory <: AbstractMPOPFModelFactory
         file_path::String
         optimizer::Type
 
-        function DCMPOPFSearchFactory(file_path::String, optimizer::Type)
+        function DCMPOPFSearchFactory(file_path::String, optimizer::Type=Ipopt.Optimizer)
             return new(file_path, optimizer)
         end
     end
@@ -38,7 +38,7 @@ module SearchModel
         file_path::String
         optimizer::Type
 
-        function ACMPOPFSearchFactory(file_path::String, optimizer::Type)
+        function ACMPOPFSearchFactory(file_path::String, optimizer::Type=Ipopt.Optimizer)
             return new(file_path, optimizer)
         end
     end
@@ -52,14 +52,14 @@ module SearchModel
     """
     abstract type AbstractMPOPFModel end
 
-    mutable struct MPOPFSearchModel <: AbstractMPOPFModel
+    mutable struct DCMPOPFSearchModel <: AbstractMPOPFModel
         model::JuMP.Model
         data::Dict
         time_periods::Int64
         ramping_data::Dict
         demands::Vector{Vector{Float64}}
 
-        function MPOPFSearchModel(model::JuMP.Model, data::Dict, time_periods::Int64, ramping_data::Dict, demands::Vector{Vector{Float64}})
+        function DCMPOPFSearchModel(model::JuMP.Model, data::Dict, time_periods::Int64, ramping_data::Dict, demands::Vector{Vector{Float64}})
             return new(model, data, time_periods, ramping_data, demands)
         end
     end
@@ -80,25 +80,23 @@ module SearchModel
     ###########################################################################
     # Creation methods
     ###########################################################################
-
-    # Want to take the ramping_data and demands out of the parameter list here. Will find a way to remove them
-    function create_search_model(factory::AbstractMPOPFModelFactory, time_periods::Int64, ramping_data::Dict, demands::Vector{Vector{Float64}})::MPOPFSearchModel
+    function create_search_model(factory::DCMPOPFSearchFactory, time_periods::Int64, ramping_data::Dict, demands::Vector{Vector{Float64}})::DCMPOPFSearchModel
         data = PowerModels.parse_file(factory.file_path)
         PowerModels.standardize_cost_terms!(data, order=2)
         PowerModels.calc_thermal_limits!(data)
 
         model = JuMP.Model(factory.optimizer)
 
-        power_flow_model = MPOPFSearchModel(model, data, time_periods, ramping_data, demands)
+        power_flow_model = DCMPOPFSearchModel(model, data, time_periods, ramping_data, demands)
 
-        set_model_variables!(power_flow_model, factory)
-        set_model_objective_function!(power_flow_model, factory)
-        set_model_constraints!(power_flow_model, factory)
+        set_model_variables!(power_flow_model)
+        set_model_objective_function!(power_flow_model)
+        set_model_constraints!(power_flow_model)
 
         return power_flow_model
     end
 
-    function create_search_model_AC(factory::AbstractMPOPFModelFactory, time_periods::Int64, ramping_data::Dict,
+    function create_search_model(factory::ACMPOPFSearchFactory, time_periods::Int64, ramping_data::Dict,
                 active_demands::Vector{Dict{Int64, Float64}}, reactive_demands::Vector{Dict{Int64, Float64}})::ACMPOPFSearchModel
         data = PowerModels.parse_file(factory.file_path)
         PowerModels.standardize_cost_terms!(data, order=2)
@@ -108,9 +106,9 @@ module SearchModel
 
         power_flow_model = ACMPOPFSearchModel(model, data, time_periods, ramping_data, active_demands, reactive_demands)
 
-        set_model_variables!(power_flow_model, factory)
-        set_model_objective_function!(power_flow_model, factory)
-        set_model_constraints!(power_flow_model, factory)
+        set_model_variables!(power_flow_model)
+        set_model_objective_function!(power_flow_model)
+        set_model_constraints!(power_flow_model)
 
         return power_flow_model
     end

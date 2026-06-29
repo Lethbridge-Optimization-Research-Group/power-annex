@@ -4,6 +4,8 @@ module SearchModel
     using PowerModels, JuMP, Dates, Serialization, PlotlyJS, Ipopt, Graphs
     using Distributions, Statistics
     using LinearAlgebra
+    # Export of aggregate_demand_data.jl
+    export get_date_percentages, percentages_of_max_demand, parse_csv_data, get_hourly_average
     # Export of rampingCSVimplementation_DC.jl
     export safe_parse_float, parse_power_system_csv, generate_power_system_csv, generate_daily_demand_csv, generate_daily_demand_profile
 

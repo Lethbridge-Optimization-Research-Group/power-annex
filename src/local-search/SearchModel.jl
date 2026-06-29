@@ -124,11 +124,15 @@ module SearchModel
     include("model-creation-helpers/implementation-search_ac.jl")
     include("model-creation-helpers/implementation-search_dc.jl")
     
-    # CSV file and demand multiplier vector generation functions.
+    # CSV file and demand multiplier vector generation functions
     # These make data that can be fed into model creation parameters
     include("../util-org/demand_data_generation/rampingCSVimplementation_AC.jl")
     include("../util-org/demand_data_generation/rampingCSVimplementation_DC.jl")
     include("../util-org/demand_data_generation/aggregate_demand_data.jl")
+
+    # Defines all functionality needed to use graph-search
+    include("./graph_search_implementation/graph_search_AC.jl")
+    include("./graph_search_implementation/graph_search_DC.jl")
 
     ###########################################################################
     # Generic optimization function

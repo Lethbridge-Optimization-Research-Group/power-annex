@@ -1,11 +1,13 @@
 using JuMP, Ipopt, Gurobi, Serialization, Random, Graphs, MetaGraphs, MathOptInterface
 using PowerModels
-using SearchModel # Local module
+using .SearchModel # Local module
 using Statistics, Plots, GraphRecipes
+
+# This file is an example for how to run GraphSearch and compare to a standard local-search MPOPF
 
 matpower_file_path = "../cases/case14.m"
 
-t = 24
+t = 24 # Current functions only support up to 24 time periods
 
 output_dir = "./CSV"
 
@@ -40,7 +42,7 @@ graph_cost = info_DC[:cost]
 
 hourly_demand_multipliers = get_date_percentages("./CSV/PUB_Demand_2025.csv", "2025-10-01") # Makes demand curve from public data files
 
-ramping_csv_file_AC = generate_ac_vector_demand_csv(data, output_dir, hourly_demand_multipliers)
+ramping_csv_file_AC = generate_ac_vector_demand_csv(data, output_dir, hourly_demand_multipliers) # You can optionally include a seed here
 
 ramping_data_AC, active_demands_AC, reactive_demands_AC = parse_ac_power_system_csv(ramping_csv_file_AC, matpower_file_path)
 

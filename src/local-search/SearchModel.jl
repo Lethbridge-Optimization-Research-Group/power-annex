@@ -24,7 +24,7 @@ module SearchModel
     The type used tells create_search_model which method to use to make an AC/DC model.
     """
     abstract type AbstractMPOPFModelFactory end
-    
+
     mutable struct DCMPOPFSearchFactory <: AbstractMPOPFModelFactory
         file_path::String
         optimizer::Type
@@ -113,13 +113,23 @@ module SearchModel
         return power_flow_model
     end
 
+    ###########################################################################
+    # Include Section
+    ###########################################################################
+
+    # Functions which set JuMP Constraints, Objective functions and variables
+    # Only needs modifing if changing relaxation space or implementations
     include("model-creation-helpers/implementation-search_ac.jl")
     include("model-creation-helpers/implementation-search_dc.jl")
-    include("../util-org/ramp_data_generation/rampingCSVimplementation_AC.jl")
-    include("../util-org/ramp_data_generation/rampingCSVimplementation_DC.jl")
+    
+    # CSV file and demand multiplier vector generation functions.
+    # These make data that can be fed into model creation parameters
+    include("../util-org/demand_data_generation/rampingCSVimplementation_AC.jl")
+    include("../util-org/demand_data_generation/rampingCSVimplementation_DC.jl")
+    include("../util-org/demand_data_generation/aggregate_demand_data.jl")
 
     ###########################################################################
-    # Optimization function
+    # Generic optimization function
     ###########################################################################
     """
         optimize_model(model::AbstractMPOPFModel)
@@ -133,14 +143,13 @@ module SearchModel
         That is if `sum_of_mu_plus` and `mu_minus` are both > 0.01
         at any given bus then an error message is printed.
     # Arguments
-    - `model`: The MPOPF model to optimize.
+    - `model::AbstractMPOPFModel`: The MPOPF model to optimize.
     """
     function optimize_model(model::AbstractMPOPFModel)
         optimize!(model.model)
         optimal_cost = objective_value(model.model)
         println("Optimal Cost: ", optimal_cost)
         println()
-
 
         # Below is a bunch of legacy code from the other repository 'Power'.
         # This module has not defined the uncertainty model so it will throw an error.

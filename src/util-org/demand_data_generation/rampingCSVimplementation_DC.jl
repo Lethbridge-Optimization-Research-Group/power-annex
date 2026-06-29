@@ -70,13 +70,14 @@ Generates a CSV file containing ramping data and active power demands for a give
 - `data::Dict`: Case-specific power system dictionary
 - `output_dir::String`: Path to the desired output folder
 - `num_periods::Int64`: Number of time periods to generate (default 24)
+- `seed::Union{Int64, Nothing}`: Optional seed value to fix rng
 
 # Returns
 - `output_file::String`: The path to the generated CSV file.
 """
-function generate_power_system_csv(data::Dict, output_dir::String, num_periods::Int=24)
+function generate_power_system_csv(data::Dict, output_dir::String, num_periods::Int=24; seed::Union{Int64, Nothing}=nothing)
     
-    Random.seed!(42)  # Implement a seed for reproducability, this will only affect ramp limits and ramp costs
+    isnothing(seed) ? Random.seed!() : Random.seed!(seed) # introduce a seed for reproducability
     
     # Extract case name
     case_name = basename(data["name"])
@@ -141,7 +142,6 @@ function generate_power_system_csv(data::Dict, output_dir::String, num_periods::
     initial_demand = [get(demand_dict, bus_id, 0.0) for bus_id in bus_ids]
 
     # Generate random variations for additional time periods
-    Random.seed!(42)  # Input a seed if you like for reproducibility
     demands = [initial_demand]
     for _ in 2:num_periods
         variation = rand(length(bus_ids)) * 0.2 .- 0.1  ### RAMP VARIATION ### 
@@ -194,9 +194,7 @@ Typical daily pattern:
 - Afternoon/Evening peak: 2-8 PM (0.9-1.0x base)
 - Evening decline: 8 PM-midnight (1.0-0.6x base)
 """
-function generate_daily_demand_profile(base_demand::Float64, hour::Int)
-    Random.seed!(42)
-
+function generate_daily_demand_profile(hour::Int)
     hourly_demand_multipliers = [
         0.7774898823226734,  # Hour 1 (Midnight-1 AM)
         0.7577746367160817,  # Hour 2
@@ -234,13 +232,15 @@ function generate_daily_demand_profile(base_demand::Float64, hour::Int)
     return max(0.5, min(1.1, multiplier))
 end
 
-function generate_daily_demand_csv(data::Dict, output_dir::String, num_periods::Int=24)
+function generate_daily_demand_csv(data::Dict, output_dir::String, num_periods::Int=24, seed::Union{Int64, Nothing}=nothing)
     # Extract case name
     case_name = basename(data["name"])
     case_name = replace(case_name, ".m" => "")
 
     # Create a filename
     output_file = joinpath(output_dir, "$(case_name)_rampingData.csv")
+
+    isnothing(seed) ? Random.seed!() : Random.seed!(seed)
 
     # Calculate total generation capacity
     total_generation_capacity = 0.0
@@ -299,7 +299,6 @@ function generate_daily_demand_csv(data::Dict, output_dir::String, num_periods::
     base_demand_per_bus = [get(demand_dict, bus_id, 0.0) for bus_id in bus_ids]
 
     # Generate realistic daily demand pattern for each time period
-    Random.seed!(42)  # For reproducibility - change or remove for random patterns
     demands = []
 
     for hour in 1:num_periods
@@ -310,7 +309,7 @@ function generate_daily_demand_csv(data::Dict, output_dir::String, num_periods::
             base_bus_demand = base_demand_per_bus[bus_idx]
             
             # Apply daily profile multiplier
-            multiplier = generate_daily_demand_profile(base_bus_demand, hour)
+            multiplier = generate_daily_demand_profile(hour)
             new_demand = base_bus_demand * multiplier
             
             # Ensure non-negative

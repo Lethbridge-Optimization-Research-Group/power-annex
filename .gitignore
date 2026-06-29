@@ -5,6 +5,6 @@ Manifest.toml
 *.jl.mem
 deps/deps.jl
 *.orig 
-src/local-search/CSV/*.csv
+src/local-search/CSV/case*.csv
 
 .DS_Store

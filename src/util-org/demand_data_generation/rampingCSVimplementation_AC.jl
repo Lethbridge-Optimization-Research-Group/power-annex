@@ -12,8 +12,8 @@ using CSV, DataFrames, Random
     - `"gen_id"`: An integer bus id
     - `"ramp_limits"`: Dict mapping gen_id to the respective ramp limit
     - `"costs"`: Dict mapping gen_id to its ramping cost
-- `active_demands::vector{Dict{Int,Float64}}`: A vector containing active demands for each time period
-- `reactive_demands::vector{Dict{Int,Float64}}`: A vector containing reactive demands for each time period
+- `active_demands::Vector{Dict{Int,Float64}}`: A vector containing active demands for each time period
+- `reactive_demands::Vector{Dict{Int,Float64}}`: A vector containing reactive demands for each time period
 """
 function parse_ac_power_system_csv(file_path::String, matpower_file_path::String)
     csv_content = read(file_path, String)
@@ -158,25 +158,25 @@ function perturb_power_vector(pd::Float64, qd::Float64, magnitude_multiplier::Fl
 end
 
 """
-    generate_ac_vector_demand_profile(base_pd::Float64, base_qd::Float64, hour::Int64, hourly_demand_multipliers::Vector{Float64}; max_angle_variation::Float64=10.0)
+    generate_ac_vector_demand_profile(base_pd::Float64, base_qd::Float64, hour::Int64, 
+    hourly_demand_multipliers::Vector{Float64}; max_angle_variation::Float64=10.0)
 
 Generate demand for a specific hour using vector perturbation approach
 - Generated demands are seeded randomly based on the input hour, but will
   be consistent for the same hour across runs.
     
 # Arguments
-- base_pd, base_qd: Base active and reactive power
-- hour: Hour of day (1-24)
-- peak_hour, min_hour: Hours of peak and minimum demand
-- peak_magnitude, min_magnitude: Multipliers for magnitude at peak and minimum
-- max_angle_variation: Maximum angle change in degrees from base
+- `base_pd::Float64`: Base active power
+- `base_qd::Float64`: Base reactive power
+- `hour::Int64`: Hour of day (1-24)
+- `hourly_demand_multipliers::Vector{Float64}`: Floating point vector with demand scaling values for each hour
+- `max_angle_variation::Float64`: Maximum angle change in degrees from base (default 10)
 
 # Returns
 - `new_pd::Float64`, `new_qd::Float64`, where `new_pd` and `new_qd` denote the real and imaginary power demands for the given hour.
 """
 function generate_ac_vector_demand_profile(base_pd::Float64, base_qd::Float64, hour::Int64, hourly_demand_multipliers::Vector{Float64};
                                            max_angle_variation::Float64=10.0)
-    Random.seed!(42 + hour)
     
 
     min_hour = minimum(hourly_demand_multipliers)
@@ -205,7 +205,9 @@ function generate_ac_vector_demand_profile(base_pd::Float64, base_qd::Float64, h
 end
 
 """
-    generate_ac_vector_demand_csv(data::Dict, output_dir::String, hourly_demand_multipliers, num_periods::Int=24; default_power_factor::Float64=0.85, capacity_safety_margin::Float64=0.95)
+    generate_ac_vector_demand_csv(data::Dict, output_dir::String, hourly_demand_multipliers,
+    num_periods::Int=24; default_power_factor::Float64=0.85, capacity_safety_margin::Float64=0.95,
+    seed::Union{Int64, Nothing}=nothing)
 
 Generate AC multi-period demand using vector perturbation approach
 
@@ -219,17 +221,19 @@ Generate AC multi-period demand using vector perturbation approach
 - `num_periods::Int64`: Number of time periods to generate (default 24)
 - `default_power_factor::Float64`: A factor used to replace any missing reactive powers (default 0.85)
 - `capacity_safety_margin::Float64`: Maximum percentage of total generation capacity that can be used for demand (default 0.95)
+- `seed::Int64`: Input a seed for consistent generation, leave blank for random
 
 # Returns
 - `output_file::String`: the file path generated.
-
 """
 function generate_ac_vector_demand_csv(data::Dict, output_dir::String, hourly_demand_multipliers, num_periods::Int64=24;
-                                       default_power_factor::Float64=0.85,
-                                       capacity_safety_margin::Float64=0.95)
+                                       default_power_factor::Float64=0.85, capacity_safety_margin::Float64=0.95, 
+                                       seed::Union{Int64, Nothing}=nothing)
     case_name = basename(data["name"])
     case_name = replace(case_name, ".m" => "")
     output_file = joinpath(output_dir, "$(case_name)_AC_rampingData.csv")
+
+    isnothing(seed) ? Random.seed!() : Random.seed!(seed)
 
     # Calculate generation capacity and prepare generator data
     total_generation_capacity = 0.0
@@ -302,9 +306,8 @@ function generate_ac_vector_demand_csv(data::Dict, output_dir::String, hourly_de
         total_base_pd *= scaling_factor
         total_base_qd *= scaling_factor
     end
-
+    
     # Generate demands for each time period using vector perturbations
-    Random.seed!(123)
     active_demands = []
     reactive_demands = []
 
@@ -340,7 +343,8 @@ function generate_ac_vector_demand_csv(data::Dict, output_dir::String, hourly_de
     println(csv_content, "#gen_data")
     println(csv_content, "gen_id,ramp_limits,costs")
     for (index, ramp, cost) in gen_data
-        println(csv_content, "$index,$ramp,$cost")
+        rramp = round(ramp, digits=4)
+        println(csv_content, "$index,$rramp,$cost")
     end
     println(csv_content, "#bus_data")
     print(csv_content, "bus_id")
@@ -397,14 +401,22 @@ function generate_ac_vector_demand_csv(data::Dict, output_dir::String, hourly_de
 end
 
 """
-    generate_power_system_csv_AC(data::Dict, output_dir::String, hourly_demand_multipliers::Vector{Float64}, num_periods::Int=24)
+    generate_power_system_csv_AC(data::Dict, output_dir::String, 
+    hourly_demand_multipliers::Vector{Float64}, num_periods::Int=24, seed::Union{Int64, Nothing})
 
 A convenience wrapper that calls generate_ac_vector_demand_csv with the provided arguments.
-- Does the same thing, but doesn't offer the optional arguments. Exists mainly to appeal to
-the original DC function with a similar name.
+- Does the same thing, but doesn't offer the optional safety margin and power factor arguments. Exists mainly to appeal to
+the original DC function with a similar name. 
+
+# Arguments
+- `data::Dict`: PowerModels-parsed case dictionary
+- `output_dir::String`: Directory path to save the csv in
+- `hourly_demand_multipliers::Vector{Float64}`: Vector with multipliers to shape the hourly demand curve
+- `num_periods::Int64`: Number of time periods to generate the csv for
+- `seed::Union{Int64, Nothing}`: An rng seed to fix generation results (default no seed)
 """
-function generate_power_system_csv_AC(data::Dict, output_dir::String, hourly_demand_multipliers::Vector{Float64}, num_periods::Int=24)
-    return generate_ac_vector_demand_csv(data, output_dir, hourly_demand_multipliers, num_periods)
+function generate_power_system_csv_AC(data::Dict, output_dir::String, hourly_demand_multipliers::Vector{Float64}, num_periods::Int=24; seed::Union{Int64, Nothing}=nothing)
+    return generate_ac_vector_demand_csv(data, output_dir, hourly_demand_multipliers, num_periods; seed=seed)
 end
 
  """

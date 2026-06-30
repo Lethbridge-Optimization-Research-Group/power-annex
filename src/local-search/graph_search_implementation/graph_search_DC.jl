@@ -7,15 +7,19 @@ Create a DC graph model that iteratively adjusts generator values
 in order to form a solution.
 
 # Arguments
-- 'data::Dict{String, Any}' : Powermodels parsed Matpower case data
-- 'factory::DCMPOPFSearchFactory' : Model factory for creating JuMP OPF models
-- 'demands::Vector{Dict{Int64, Float64}}' : Demands for each time period
-- 'ramping_data::Dict{String, Any}' : Ramping costs and limits for each generator
-- 'time_periods::Int' : Number of time periods 
+- `data::Dict{String, Any}` : Powermodels parsed Matpower case data
+- `factory::DCMPOPFSearchFactory` : Model factory for creating JuMP OPF models
+- `demands::Vector{Dict{Int64, Float64}}` : Demands for each time period
+- `ramping_data::Dict{String, Any}` : Ramping costs and limits for each generator
+- `time_periods::Int` : Number of time periods 
 
 # Returns 
-- 'info::Dict{Symbol, Any}' : Model info and associated data
-Access with info[:parameter]
+- `info::Dict{Symbol, Any}` : Model info and associated data
+
+Access with `info[:parameter]`
+
+# Keys 
+`
 :time
 :graph
 :path
@@ -25,6 +29,7 @@ Access with info[:parameter]
 :violations
 :generation_cost
 :ramping_cost
+`
 """
 function DC_graph_search(data, factory, demands, ramping_data, time_periods)
     

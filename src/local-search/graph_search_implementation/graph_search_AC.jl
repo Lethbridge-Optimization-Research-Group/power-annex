@@ -1,4 +1,5 @@
-using Graphs, MetaGraphs, Gurobi, JuMP
+using Graphs, MetaGraphs, Gurobi, JuMP, PlotlyJS
+
 #=
 - return actual models used in final solution
     - compare P, Q, V, theta from opt. model and solved model (plot)
@@ -20,16 +21,19 @@ Create an AC graph model that iteratively adjusts generator values
 in order to form a solution.
 
 # Arguments
-- 'data::Dict{String, Any}' : Powermodels parsed Matpower case data
-- 'factory::ACMPOPFSearchFactory' : Model factory for creating JuMP AC-OPF models
-- 'active_demands::Vector{Dict{Int64, Float64}}' : Active power demands for each time period
-- 'reactive_demands::Vector{Dict{Int64, Float64}}' : Reactive power demands for each time period
-- 'ramping_data::Dict{String, Any}' : Ramping costs and limits for each generator
-- 'time_periods::Int' : Number of time periods 
+- `data::Dict{String, Any}` : Powermodels parsed Matpower case data
+- `factory::ACMPOPFSearchFactory` : Model factory for creating JuMP AC-OPF models
+- `active_demands::Vector{Dict{Int64, Float64}}` : Active power demands for each time period
+- `reactive_demands::Vector{Dict{Int64, Float64}}` : Reactive power demands for each time period
+- `ramping_data::Dict{String, Any}` : Ramping costs and limits for each generator
+- `time_periods::Int` : Number of time periods 
 
 # Returns 
-- 'info::Dict{Symbol, Any}' : Model info and associated data
-Access with info[:parameter]
+- `info::Dict{Symbol, Any}` : Final model solution information and associated data.
+
+Access with `info[:parameter]`
+# Keys
+`
 :time
 :graph
 :path
@@ -39,8 +43,8 @@ Access with info[:parameter]
 :violations
 :generation_cost
 :ramping_cost
+`
 """
-
 function AC_graph_search(data, factory, active_demands, reactive_demands, ramping_data, time_periods)
     
     iteration = 1
@@ -641,7 +645,7 @@ Build and optimize an AC power flow model for the peak demand period, setting a 
 function build_and_optimize_largest_period_AC(factory, active_demand, reactive_demand, ramping_data)
     # active_demand here is put into a container to create a 1 time period vector for model creation.
     # don't pass active_demand or reactive_demand directly or create_search_model may access invalid space.
-    
+
     demands = [active_demand]  # Adjust based on your factory interface
     reactive_demands = [reactive_demand]
     
@@ -655,8 +659,16 @@ end
     test_feasibility_ac(factory, path, graph, active_demands, reactive_demands, ramping_data)
 
 Test the feasibility of each node in a path by solving an AC power flow model.
+
+# Arguments
+- `factory::AbstractMPOPFModelFactory`: The model's factory for use in making and optimizing the scenario path we desire
+- `path::Int[]`: An array of integer nodes representing a particular path in our scenario graph
+- `graph::AbstractMetaGraph{T}`: A graph defined using MetaGraphs package containing our scenario data and paths
+- `active_demands::Vector{Vector{Float64}}`: All active demands across all time periods
+- `reactive_demands::Vector{Vector{Float64}}`: All reactive demands across all time periods
+- `ramping_data::Dict{String, Any}`
 """
-function test_feasibility_AC(factory, path, graph, active_demands, reactive_demands, ramping_data)
+function test_feasibility_AC(factory::AbstractMPOPFModelFactory, path::Int[], graph::MetaGraphs.AbstractMetaGraph{T}, active_demands::Vector{Vector{Float64}}, reactive_demands::Vector{Vector{Float64}}, ramping_data::Dict{String, Any})
     infeasible_nodes = []
 
     for node in path[2:end-1]
@@ -971,7 +983,17 @@ end
 """
     get_generation_and_ramping_costs_ac(data, info, model)
 
-Compare AC cost breakdowns between graph model and full optimization model.
+Runs the cost calculations for both a provided graph search model and a full local search model
+    by adding all generation costs multiplied by their coefficients, as well as the polynomial cost terms
+    for active and reactive power generation. Then returns a 4 element dictionary with the respective model costs.
+
+# Arguments
+- `data::Dict{String, Any}`: The PowerModels case dictionary
+- `info::Dict{Symbol, Any}`: An optimized solution from AC_graph_search
+- `model::AbstractMPOPFModel`: A fully optimized external model, typically a SearchModel
+
+# Returns
+- `info::Dict{Symbol, Any}`: A dictionary containing symbols for the generation and ramping costs of the provided models
 """
 function get_generation_and_ramping_costs_AC(data, info, model)
     graph_model_generation_cost = info[:generation_cost]
@@ -1024,6 +1046,15 @@ end
     graph_demands_and_generation_ac(active_demands, reactive_demands, full_model, graph_solution)
 
 Plot AC demand and generation output comparisons.
+
+# Arguments
+- `active_demands::Vector{Vector{Float64}}`: All active demands over all time periods
+- `reactive_demands::Vector{Vector{Float64}}`: All reactive demands over all time periods
+- `full_model::AbstractMPOPFModel`: The full MPOPF model to be compared against
+- `graph_solution::MetaGraphs.AbstractMetaGraph{T}`: The optimized graph solution returned by AC_graph_search
+
+# Output
+- Displays and saves comparative graphs generated with (I believe) PlotlyJS
 """
 function graph_demands_and_generation_AC(active_demands, reactive_demands, full_model, graph_solution)
     time_periods = length(graph_solution) - 2

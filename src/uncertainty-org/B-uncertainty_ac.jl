@@ -58,7 +58,7 @@ for (i, gen) in ref[:gen]
     end
 
 end
-###
+#####
 
 # Check that the solver terminated without an error
 println("The solver termination status is $(result[:status])")

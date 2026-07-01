@@ -1,4 +1,13 @@
-#uncertainty driver
+# =====================================================
+# B-uncertainty_ac.jl
+#
+# Driver file for uncertainty experiments on AC OPF.
+# Based on main_epsilon_ac.jl
+#
+# Author: Shidratul Muntaha
+# =====================================================
+
+
 #= configuration variables =#
 CASE_DIR="../../data/"
 CASE_FILE="case1354pegase.m"
@@ -14,6 +23,9 @@ include(ROOT_DIR*"src/util-org/read_case.jl")
 #= build the ref dictionary with the case data
 =#
 ref = read_case(CASE_DIR * CASE_FILE)
+
+# Uncertainty scaling factor
+λ = 1.00
 
 #= create the model for Ipopt
 =#

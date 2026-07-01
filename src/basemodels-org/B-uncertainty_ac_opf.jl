@@ -192,7 +192,14 @@ function solve_model_ac!(ref, model,lambda)
     result[:status] = termination_status(model)
     result[:cost] = objective_value(model)
     result[:time_sec] = stats.time
+##newly added code to collect the optimal solution
+# Store generator active power outputs
+result[:pg] = Dict{Int64, Float64}()
 
+for i in keys(ref[:gen])
+    result[:pg][i] = value(pg[i])
+end
+###
     # create dictionary for the power amount flowing on lines
     result[:p_arcs] = Dict{Tuple{Int64, Int64, Int64}, Float64}()
     result[:q_arcs] = Dict{Tuple{Int64, Int64, Int64}, Float64}()

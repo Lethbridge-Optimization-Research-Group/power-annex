@@ -9,29 +9,29 @@
 
 
 #= configuration variables =#
-CASE_DIR="../../data/"
-CASE_FILE="case1354pegase.m"
-ROOT_DIR="/home/rbenkocz/proj/power-flow/src/power-annex/"
+CASE_DIR = "/Users/shidratulmuntaha/power-annex/.github/workflows/cases/"
+CASE_FILE = "case118.m"
+ROOT_DIR = "/Users/shidratulmuntaha/power-annex/"
 
 #= ***********
 include first the files with the needed functions
 **************
-=# 
+=#
 include(ROOT_DIR * "src/basemodels-org/B-uncertainty_ac_opf.jl")
-include(ROOT_DIR*"src/util-org/read_case.jl")
+include(ROOT_DIR * "src/util-org/read_case.jl")
 
 #= build the ref dictionary with the case data
 =#
 ref = read_case(CASE_DIR * CASE_FILE)
 
 # Uncertainty scaling factor
-λ = 1.00
+lambda = 1.15
 
 #= create the model for Ipopt
 =#
 model = init_ac()
 
-result = solve_model_ac!(ref, model)
+result = solve_model_ac!(ref, model,lambda)
 
 # Check that the solver terminated without an error
 println("The solver termination status is $(result[:status])")

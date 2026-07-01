@@ -34,7 +34,7 @@ model: an initialized and empty JuMP model
 RET
 dictionary for the result values
 =#
-function solve_model_ac!(ref, model,lambda)
+function solve_model_ac!(ref, model)
     # Add voltage angles va for each bus
     @variable(model, va[i in keys(ref[:bus])])
     # note: [i in keys(ref[:bus])] adds one `va` variable for each bus in the network
@@ -95,7 +95,7 @@ function solve_model_ac!(ref, model,lambda)
                     sum(p[a] for a in ref[:bus_arcs][i]) +                  # sum of active power flow on lines from bus i +
                         sum(p_dc[a_dc] for a_dc in ref[:bus_arcs_dc][i]) ==     # sum of active power flow on HVDC lines from bus i =
                         sum(pg[g] for g in ref[:bus_gens][i]) -                 # sum of active power generation at bus i -
-                        sum(lambda*load["pd"] for load in bus_loads) -                 # sum of active load consumption at bus i -
+                        sum(load["pd"] for load in bus_loads) -                 # sum of active load consumption at bus i -
                         sum(shunt["gs"] for shunt in bus_shunts)*vm[i]^2        # sum of active shunt element injections at bus i
                     )
 

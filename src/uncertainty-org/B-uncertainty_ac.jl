@@ -25,7 +25,7 @@ include(ROOT_DIR * "src/util-org/read_case.jl")
 ref = read_case(CASE_DIR * CASE_FILE)
 
 # Uncertainty scaling factor
-lambda = 1.15
+lambda = 2.1 #least feasible point for this system
 
 #= create the model for Ipopt
 =#

@@ -24,17 +24,18 @@ include(ROOT_DIR * "src/util-org/read_case.jl")
 =#
 ref = read_case(CASE_DIR * CASE_FILE)
 
-# Uncertainty scaling factor
+####### ** Uncertainty scaling factor **
 # lambda = 2.3  #Maximum feasible load scaling factor for this system-2.1
 
-#####random lambda
+
+##0.05 -> So if the original load is 100 MW, then most of the time the random load will be around:95 MW to 105 MW
+##### **random lambda**
+
 using Random
-
 lambda = 1 + 0.05 * randn()
-
 println("Random lambda = ", round(lambda, digits=3))
-#######
 
+#######
 
 #= create the model for Ipopt
 =#
@@ -42,33 +43,68 @@ model = init_ac()
 
 result = solve_model_ac!(ref, model,lambda)
 
-##newly code
-println("\nChecking generators...\n")
 
-for (i, gen) in ref[:gen]
 
-    pg_value = result[:pg][i]
+# #### ** identify cost ***
+# # using Random
+# for sim = 1:10
 
-    println("Generator ", i,
-            "  Pg = ", round(pg_value, digits=2),
-            "  Pmax = ", gen["pmax"])
+#    # Generate a random lambda
+#     lambda = 1 + 0.05 * randn()
+   
+#     println("\nSimulation ", sim)
+#     println("Random lambda = ", round(lambda, digits=3))
 
-end
+#     # Create a new optimization model
+#     model = init_ac()
 
-# ####
-# println("\nGenerators at Pmax:\n")
+#     # Solve the OPF
+#     result = solve_model_ac!(ref, model, lambda)
 
+#     # Print results
+#     println("Status = ", result[:status])
+#     println("Cost = ", result[:cost])
+
+# end
+
+# ###
+
+
+# ### **increase the lambda 5% on each time
+# lambda=1.0
+# for sim = 1:10
+
+#     println("\nSimulation ", sim)
+#     println("lambda = ", round(lambda, digits=3))
+
+#     # Create a new optimization model
+#     model = init_ac()
+
+#     # Solve the OPF
+#     result = solve_model_ac!(ref, model, lambda)
+
+#     # Print results
+#     println("Status = ", result[:status])
+#     println("Cost = ", result[:cost])
+
+#    global lambda += 0.05
+# end
+
+# ###
+
+
+### ** generator-power violation **
+
+# println("\nChecking generators...\n")
 # for (i, gen) in ref[:gen]
 
 #     pg_value = result[:pg][i]
-# #If the difference between Pg and Pmax is less than 0.0001, consider them equal; abs- to ignore neg values
-
-#     if abs(pg_value - gen["pmax"]) < 1e-4 
-#         println("Generator ", i, " reached Pmax")
-#     end
-
+#     println("Generator ", i,
+#             "  Pg = ", round(pg_value, digits=2),
+#             "  Pmax = ", gen["pmax"])
 # end
-#####
+
+
 
 # Check that the solver terminated without an error
 println("The solver termination status is $(result[:status])")

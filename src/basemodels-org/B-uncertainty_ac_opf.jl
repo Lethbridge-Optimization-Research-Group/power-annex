@@ -193,7 +193,7 @@ function solve_model_ac!(ref, model,lambda)
     result[:cost] = objective_value(model)
     result[:time_sec] = stats.time
 ##newly added code to collect the optimal solution
-# Store generator active power outputs
+#Store generator active power outputs
 result[:pg] = Dict{Int64, Float64}()
 
 for i in keys(ref[:gen])

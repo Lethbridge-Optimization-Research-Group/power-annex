@@ -25,7 +25,16 @@ include(ROOT_DIR * "src/util-org/read_case.jl")
 ref = read_case(CASE_DIR * CASE_FILE)
 
 # Uncertainty scaling factor
-lambda = 2.3  #Maximum feasible load scaling factor for this system-2.1
+# lambda = 2.3  #Maximum feasible load scaling factor for this system-2.1
+
+#####random lambda
+using Random
+
+lambda = 1 + 0.05 * randn()
+
+println("Random lambda = ", round(lambda, digits=3))
+#######
+
 
 #= create the model for Ipopt
 =#
@@ -45,19 +54,20 @@ for (i, gen) in ref[:gen]
             "  Pmax = ", gen["pmax"])
 
 end
-####
-println("\nGenerators at Pmax:\n")
 
-for (i, gen) in ref[:gen]
+# ####
+# println("\nGenerators at Pmax:\n")
 
-    pg_value = result[:pg][i]
-#If the difference between Pg and Pmax is less than 0.0001, consider them equal; abs- to ignore neg values
+# for (i, gen) in ref[:gen]
 
-    if abs(pg_value - gen["pmax"]) < 1e-4 
-        println("Generator ", i, " reached Pmax")
-    end
+#     pg_value = result[:pg][i]
+# #If the difference between Pg and Pmax is less than 0.0001, consider them equal; abs- to ignore neg values
 
-end
+#     if abs(pg_value - gen["pmax"]) < 1e-4 
+#         println("Generator ", i, " reached Pmax")
+#     end
+
+# end
 #####
 
 # Check that the solver terminated without an error

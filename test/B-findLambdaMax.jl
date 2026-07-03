@@ -90,6 +90,7 @@ for bus_id in sort(collect(keys(bus_to_loads)))
     ########################################################
 
     λ = 1.0
+    #initial value
     lambda_max = 0.0
 
     while true

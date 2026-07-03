@@ -25,23 +25,30 @@ include(ROOT_DIR * "src/util-org/read_case.jl")
 ref = read_case(CASE_DIR * CASE_FILE)
 
 ####### ** Uncertainty scaling factor **
-# lambda = 2.3  #Maximum feasible load scaling factor for this system-2.1
+lambda = 3.4  #Maximum feasible load scaling factor for this system-2.1
+
+# #= create the model for Ipopt
+# =#
+model = init_ac()
+
+result = solve_model_ac!(ref, model,lambda)
+
 
 
 ##0.05 -> So if the original load is 100 MW, then most of the time the random load will be around:95 MW to 105 MW
 ##### **random lambda**
 
-using Random
-lambda = 1 + 0.05 * randn()
-println("Random lambda = ", round(lambda, digits=3))
+# using Random
+# lambda = 1 + 0.05 * randn()
+# println("Random lambda = ", round(lambda, digits=3))
 
-#######
+# #######
 
-#= create the model for Ipopt
-=#
-model = init_ac()
+# #= create the model for Ipopt
+# =#
+# model = init_ac()
 
-result = solve_model_ac!(ref, model,lambda)
+# result = solve_model_ac!(ref, model,lambda)
 
 
 
@@ -71,29 +78,29 @@ result = solve_model_ac!(ref, model,lambda)
 
 
 # ### **increase the lambda 5% on each time
-# lambda=1.0
-# for sim = 1:10
+lambda=1.0
+for sim = 1:100
 
-#     println("\nSimulation ", sim)
-#     println("lambda = ", round(lambda, digits=3))
+    println("\nSimulation ", sim)
+    println("lambda = ", round(lambda, digits=3))
 
-#     # Create a new optimization model
-#     model = init_ac()
+    # Create a new optimization model
+    model = init_ac()
 
-#     # Solve the OPF
-#     result = solve_model_ac!(ref, model, lambda)
+    # Solve the OPF
+    result = solve_model_ac!(ref, model, lambda)
 
-#     # Print results
-#     println("Status = ", result[:status])
-#     println("Cost = ", result[:cost])
+    # Print results
+    println("Status = ", result[:status])
+    println("Cost = ", result[:cost])
 
-#    global lambda += 0.05
-# end
+   global lambda += 0.05
+end
 
 # ###
 
 
-### ** generator-power violation **
+# ## ** generator-power violation **
 
 # println("\nChecking generators...\n")
 # for (i, gen) in ref[:gen]
@@ -106,13 +113,13 @@ result = solve_model_ac!(ref, model,lambda)
 
 
 
-# Check that the solver terminated without an error
-println("The solver termination status is $(result[:status])")
+# # Check that the solver terminated without an error
+# println("The solver termination status is $(result[:status])")
 
-# Check the value of the objective function
-println("The cost of generation is $(result[:cost]).")
+# # Check the value of the objective function
+# println("The cost of generation is $(result[:cost]).")
 
-# output execution time (sec)
-println("Execution time for optimization: $(result[:time_sec]) sec")
+# # output execution time (sec)
+# println("Execution time for optimization: $(result[:time_sec]) sec")
 
-println("Power flow on lines: $(result[:p_arcs])")
+# println("Power flow on lines: $(result[:p_arcs])")

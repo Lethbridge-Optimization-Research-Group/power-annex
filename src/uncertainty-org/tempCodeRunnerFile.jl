@@ -1,1 +1,1 @@
-  println("Random lambda = ", round(lambda, digits=3))
+lambda = 3.4 

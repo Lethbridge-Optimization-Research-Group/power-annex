@@ -199,7 +199,7 @@ result[:pg] = Dict{Int64, Float64}()
 for i in keys(ref[:gen])
     result[:pg][i] = value(pg[i])
 end
-###
+##
     # create dictionary for the power amount flowing on lines
     result[:p_arcs] = Dict{Tuple{Int64, Int64, Int64}, Float64}()
     result[:q_arcs] = Dict{Tuple{Int64, Int64, Int64}, Float64}()

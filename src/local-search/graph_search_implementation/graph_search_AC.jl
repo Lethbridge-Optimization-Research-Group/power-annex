@@ -1,8 +1,12 @@
 using Graphs, MetaGraphs, Gurobi, JuMP, PlotlyJS
 
 #=
-Refer to the lines around 191 when looking to modify how scenarios are tested for feasability.
-If Cutting Plane implementation is desired, this would be the place to start looking.
+Refer to the lines around 711 when looking to modify how solutions are tested for feasability.
+If Cutting Plane implementation is desired, this function is where it would make the biggest impact.
+Alternatively, around line 293 is a similar function that could see better constraint checking.
+
+Around line 318 when testing scenarios, a comment denotes the use of reactive demand feasability checks,
+however it is not implemented fully and and may lead to infeasible scenarios that could otherwise be made feasible.
 =#
 
 #=
@@ -106,7 +110,7 @@ function AC_graph_search(data, factory, active_demands, reactive_demands, rampin
     search_parameters[:total_reactive_generation] = fill(baseline_total_reactive, time_periods)
 
     # Generate initial scenarios with both P and Q
-    initial_scenarios_raw = generate_new_scenarios_subset_AC(data, baseline_active_values, baseline_reactive_values,
+    initial_scenarios_raw = generate_new_scenarios_subset_AC(baseline_active_values, baseline_reactive_values,
                                                            search_parameters, 1)
 
     scenarios, scenario_violations = test_scenarios_AC(data, factory, active_demands[highest_demand], 
@@ -159,7 +163,6 @@ function AC_graph_search(data, factory, active_demands, reactive_demands, rampin
     
     generation_cost = 0.0
     ramping_cost = 0.0
-    no_improvement = 0
 
     # Main optimization loop
     while iteration < max_iterations
@@ -270,21 +273,22 @@ function AC_graph_search(data, factory, active_demands, reactive_demands, rampin
 end
 
 """
-    test_scenarios_ac(data, factory, active_demand, reactive_demand, ramping_data, random_scenarios)
+    test_scenarios_AC(data, factory, active_demand, reactive_demand, ramping_data, random_scenarios)
 
-Validate and cost each proposed AC generator scenario.
+Validate proposed AC generator scenarios by checking simple demand bounds. Return only those scenarios that are valid,
+along with their associated costs.
 
 # Arguments
-- `data::Dict{String, Any}` : PowerModels data
-- `factory::ACMPOPFSearchFactory` : Model factory
-- `active_demand::Dict{Int64, Float64}` : Active demand for a specific time period
-- `reactive_demand::Dict{Int64, Float64}` : Reactive demand for a specific time period
-- `ramping_data::Dict{String, Any}` : Ramping info
-- `random_scenarios::Vector{Tuple{Dict{Int64, Float64}, Dict{Int64, Float64}}}` : AC scenarios to test
+- `data::Dict{String, Any}`: PowerModels data
+- `factory::ACMPOPFSearchFactory`: Model factory
+- `active_demand::Dict{Int64, Float64}`: Active demand for a specific time period
+- `reactive_demand::Dict{Int64, Float64}`: Reactive demand for a specific time period
+- `ramping_data::Dict{String, Any}`: Ramping info
+- `random_scenarios::Vector{Tuple{Dict{Int64, Float64}, Dict{Int64, Float64}}}`: AC scenarios to test
 
 # Returns
-- `Vector{Tuple{Dict{Int64, Float64}, Dict{Int64, Float64}, Float64}}` : Valid scenarios with P, Q, and costs
-- `Dict{Symbol, Int}` : Violation counts
+- `Vector{Tuple{Dict{Int64, Float64}, Dict{Int64, Float64}, Float64}}`: Valid scenarios with P, Q, and costs
+- `Dict{Symbol, Int64}`: Violation counts
 """
 function test_scenarios_AC(data, factory, active_demand, reactive_demand, ramping_data, random_scenarios)
     violations = Dict(
@@ -300,7 +304,7 @@ function test_scenarios_AC(data, factory, active_demand, reactive_demand, rampin
     minimum_active_demand = sum(values(active_demand))
     minimum_reactive_demand = sum(values(reactive_demand))
 
-    tested_scenarios = []
+    valid_scenarios = []
     
     for (active_scenario, reactive_scenario) in random_scenarios
         scenario_valid = true
@@ -314,6 +318,12 @@ function test_scenarios_AC(data, factory, active_demand, reactive_demand, rampin
         
         # For reactive power, we need to consider that demand can be negative and generators can supply/absorb
         # Check if total reactive capability can meet the demand (considering both positive and negative)
+
+        #=
+        The above is true, but not sufficiently implemented. We never check to see if generators/slack buses can
+        absorb or meet reactive demand. Currently I'm not sure how to test that myself though.
+        =#
+
         total_reactive_generation = sum(values(reactive_scenario))
         if abs(total_reactive_generation) < abs(minimum_reactive_demand) && 
            sign(total_reactive_generation) != sign(minimum_reactive_demand) &&
@@ -372,15 +382,15 @@ function test_scenarios_AC(data, factory, active_demand, reactive_demand, rampin
                 end
             end
             
-            push!(tested_scenarios, (active_scenario, reactive_scenario, calculated_cost))
+            push!(valid_scenarios, (active_scenario, reactive_scenario, calculated_cost))
         end
     end
 
-    return tested_scenarios, violations
+    return valid_scenarios, violations
 end
 
 """
-    generate_new_scenarios_subset_ac(current_active, current_reactive, search_parameters, time_period; 
+    generate_new_scenarios_subset_AC(current_active, current_reactive, search_parameters, time_period; 
                                     scenarios_to_generate=15, method_choice=1, up_probability=0.3)
 
 Given a current best-scenario time period, generate a subset of new scenarios (for the same time period) by randomly modifying
@@ -691,15 +701,21 @@ end
 
 Test the feasibility of each node in a path by solving an AC power flow model.
 
+*This method is a current bottleneck to algorithm speed. Further research would be best directed
+towards reducing or removing the need to test feasibility in this manner*
+
 # Arguments
 - `factory::AbstractMPOPFModelFactory`: The model's factory for use in making and optimizing the scenario path we desire
-- `path::Int[]`: An array of integer nodes representing a particular path in our scenario graph
-- `graph::AbstractMetaGraph{T}`: A graph defined using MetaGraphs package containing our scenario data and paths
+- `path::Int64[]`: An array of integer nodes representing a particular shortest path in our scenario graph
+- `graph::MetaDiGraph`: A graph defined using MetaGraphs package containing our scenario nodes and edges
 - `active_demands::Vector{Vector{Float64}}`: All active demands across all time periods
 - `reactive_demands::Vector{Vector{Float64}}`: All reactive demands across all time periods
-- `ramping_data::Dict{String, Any}`
+- `ramping_data::Dict{String, Any}: A dictionary containing ramp limits, ids and costs for generators.`
+
+# Returns
+- `infeasible_nodes::Vector{Int64}`: A vector containing any nodes which make our current path infeasible.
 """
-function test_feasibility_AC(factory::AbstractMPOPFModelFactory, path::Int[], graph::MetaGraphs.AbstractMetaGraph{T}, active_demands::Vector{Vector{Float64}}, reactive_demands::Vector{Vector{Float64}}, ramping_data::Dict{String, Any})
+function test_feasibility_AC(factory::AbstractMPOPFModelFactory, path::Int64[], graph::MetaDiGraph, active_demands::Vector{Vector{Float64}}, reactive_demands::Vector{Vector{Float64}}, ramping_data::Dict{String, Any})
     infeasible_nodes = []
 
     for node in path[2:end-1]
@@ -736,8 +752,12 @@ end
     shortest_path_ac(graph, time_periods)
 
 Find the shortest path from source to sink in the AC graph.
+
+# Arguments
+- `graph::MetaDiGraph`: The directed graph containing nodes and edges with weights
+- `time_periods::Int64`: The number of time periods in the optimization problem
 """
-function shortest_path_AC(graph, time_periods)
+function shortest_path_AC(graph::MetaDiGraph, time_periods::Int64)
     working_graph = deepcopy(graph)
 
     for e in edges(working_graph)
@@ -757,7 +777,7 @@ function shortest_path_AC(graph, time_periods)
         return false
     end
 
-    path = Int[]
+    path = Int64[]
     current = sink_node
 
     while current != source_node
@@ -775,7 +795,7 @@ end
 
 Construct initial AC graph with nodes containing both P and Q values.
 """
-function build_initial_graph_AC(scenarios::Vector{Any}, time_periods)
+function build_initial_graph_AC(scenarios::Vector{Any}, time_periods::Int64)
     graph = MetaDiGraph()
     defaultweight!(graph, 1.0)
     
@@ -831,7 +851,7 @@ end
 
 Add edges between adjacent time periods with AC ramping costs.
 """
-function add_weighted_edges_AC!(graph, time_periods, ramping_data)
+function add_weighted_edges_AC!(graph::MetaDiGraph, time_periods::Int64, ramping_data::Dict{String, Any})
     ramp_costs = ramping_data["costs"]
     ramp_limits = ramping_data["ramp_limits"]
     
@@ -904,7 +924,7 @@ end
 
 Calculate total cost for AC path including both generation and ramping costs.
 """
-function calculate_path_cost_AC(path, graph)
+function calculate_path_cost_AC(path::Vector{Int64}, graph::MetaDiGraph)
     total_cost = 0.0
     generation_cost = 0.0
     ramping_cost = 0.0
@@ -940,7 +960,7 @@ end
 
 Extract AC solution with both active and reactive power values from path.
 """
-function extract_solution_AC(graph, path)
+function extract_solution_AC(graph::MetaDiGraph, path::Vector{Int64})
     solution = Dict{Int, Dict{Symbol, Any}}()
 
     for node in path
@@ -958,15 +978,26 @@ end
 """
     build_new_graph_ac(new_scenarios, time_periods)
 
-Construct new AC graph using updated scenarios.
+Construct new AC graph using updated scenarios. The generated graph will have time_periods + 2 nodes,
+with a source node at time 0 and a sink node at time time_periods + 1. Each time period will have its own set of scenario nodes.
+The source and sink nodes have 0 weight and connect to all first and last time period nodes, all other nodes have no edges.
+
+# Arguments
+- `new_scenarios::Vector{Vector{Any}}`: A vector which contains other vectors full of scenario tuples.
+    Each tuple contains dictionaries for active and reactive powers, plus the scenario cost. There will be a vector for every time period,
+    containing a list of its valid scenarios.
+- `time_periods::Int64`: The number of time periods in the current model.
+
+# Returns
+- `new_graph::MetaDiGraph`: A new directed graph containing all valid scenarios for each time period.
 """
-function build_new_graph_AC(new_scenarios, time_periods)
+function build_new_graph_AC(new_scenarios::Vector{Vector{Any}}, time_periods::Int64)
     new_graph = MetaDiGraph()
     defaultweight!(new_graph, 1.0)
 
     # Add source node
     add_vertex!(new_graph)
-    source_node = nv(new_graph)
+    source_node = nv(new_graph) # Stands for number of vertices. Not sure why it isn't hard coded as 1 in this case, but I won't touch it.
     set_prop!(new_graph, source_node, :time_period, 0)
     set_prop!(new_graph, source_node, :active_generator_values, Dict{Int64, Float64}())
     set_prop!(new_graph, source_node, :reactive_generator_values, Dict{Int64, Float64}())
@@ -1026,7 +1057,7 @@ Runs the cost calculations for both a provided graph search model and a full loc
 # Returns
 - `info::Dict{Symbol, Any}`: A dictionary containing symbols for the generation and ramping costs of the provided models
 """
-function get_generation_and_ramping_costs_AC(data, info, model)
+function get_generation_and_ramping_costs_AC(data::Dict{String, Any}, info::Dict{Symbol, Any}, model::AbstractMPOPFModel)
     graph_model_generation_cost = info[:generation_cost]
     graph_model_ramping_cost = info[:ramping_cost]
     search_model_generation_cost = 0.0
@@ -1074,7 +1105,7 @@ function get_generation_and_ramping_costs_AC(data, info, model)
 end
 
 """
-    graph_demands_and_generation_ac(active_demands, reactive_demands, full_model, graph_solution)
+    graph_demands_and_generation_AC(active_demands, reactive_demands, full_model, graph_solution)
 
 Plot AC demand and generation output comparisons.
 
@@ -1082,12 +1113,12 @@ Plot AC demand and generation output comparisons.
 - `active_demands::Vector{Vector{Float64}}`: All active demands over all time periods
 - `reactive_demands::Vector{Vector{Float64}}`: All reactive demands over all time periods
 - `full_model::AbstractMPOPFModel`: The full MPOPF model to be compared against
-- `graph_solution::MetaGraphs.AbstractMetaGraph{T}`: The optimized graph solution returned by AC_graph_search
+- `graph_solution::MetaDiGraph`: The optimized graph solution returned by AC_graph_search
 
 # Output
 - Displays and saves comparative graphs generated with (I believe) PlotlyJS
 """
-function graph_demands_and_generation_AC(active_demands, reactive_demands, full_model, graph_solution)
+function graph_demands_and_generation_AC(active_demands::Vector{Vector{Float64}}, reactive_demands::Vector{Vector{Float64}}, full_model::AbstractMPOPFModel, graph_solution::MetaDiGraph)
     time_periods = length(graph_solution) - 2
     
     # Extract active power outputs
@@ -1147,7 +1178,7 @@ end
 
 Write AC run summary and time-series data to CSV.
 """
-function output_run_data_to_csv_AC(data, file_path, active_demands, reactive_demands, model, info)
+function output_run_data_to_csv_AC(data::Dict{String, Any}, file_path::String, active_demands::Vector{Vector{Float64}}, reactive_demands::Vector{Vector{Float64}}, model::AbstractMPOPFModel, info::Dict{Symbol, Any})
     filename = split(file_path, "/") |> last
     time_periods = length(info[:solution]) - 2
     

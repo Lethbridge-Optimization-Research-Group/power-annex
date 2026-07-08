@@ -1,6 +1,11 @@
 using Graphs, MetaGraphs, Gurobi, JuMP, PlotlyJS
 
 #=
+Refer to the lines around 191 when looking to modify how scenarios are tested for feasability.
+If Cutting Plane implementation is desired, this would be the place to start looking.
+=#
+
+#=
 - return actual models used in final solution
     - compare P, Q, V, theta from opt. model and solved model (plot)
 - trial run with Qd staying the same across time periods
@@ -376,19 +381,40 @@ end
 
 """
     generate_new_scenarios_subset_ac(current_active, current_reactive, search_parameters, time_period; 
-                                    scenarios_to_generate=15, variation_percent=0.05, up_probability=0.3)
+                                    scenarios_to_generate=15, method_choice=1, up_probability=0.3)
 
-Generate new AC scenarios by varying both active and reactive power outputs.
+Given a current best-scenario time period, generate a subset of new scenarios (for the same time period) by randomly modifying
+the given active and reactive power values of generators. This is a key part of the local search portion of our graph search algorithm, 
+where nearby scenarios are created to explore the solution space.
+
+# Arguments
+- `current_active::Dict{Int64, Float64}`: Current active power values for generators in the given time period
+- `current_reactive::Dict{Int64, Float64}`: Current reactive power values for generators in the given time period
+- `search_parameters::Dict{Symbol, Any}`: Dictionary containing the global data dictionary for our search model
+- `time_period::Int64`: The current time period for which to generate new scenarios
+- `scenarios_to_generate::Int64`: Number of new scenarios to generate (default 15)
+- `subset_percentage::Float64`: Percentage of generators to modify in each new scenario (default 0.3, currently unused)
+- `method_choice::Int64`: Parameter passed into delta_AC which dictates how the maximum delta is calculated
+    - 1: Stochastic variation (default)
+    - 2: Dynamic Gap variation
+    - 3: Temporal Smoothing (not implemented, defaults to stochastic)
+- `up_probability::Float64`: Probability of increasing generator values rather than decreasing (default 0.3)
+
+# Returns
+- `new_scenarios::Vector{Tuple{Dict{Int64, Float64}, Dict{Int64, Float64}}}`: 
+A vector of tuples, one for each new scenario specified to generate. Each tuple contains two dictionaries with all generators'
+new active and reactive powers.
 """
-function generate_new_scenarios_subset_AC(current_active, current_reactive, search_parameters, time_period; 
-                                         scenarios_to_generate=15,
-                                         subset_percentage=0.3, 
-                                         variation_percent=0.05,
-                                         up_probability=0.3)
+function generate_new_scenarios_subset_AC(current_active::Dict{Int64, Float64}, current_reactive::Dict{Int64, Float64}, search_parameters::Dict{Symbol, Any},
+                                         time_period::Int64; 
+                                         scenarios_to_generate::Int64=15,
+                                         subset_percentage::Float64=0.3, 
+                                         method_choice::Int64=1,
+                                         up_probability::Float64=0.3)
     
     data = search_parameters[:data]
-    core_generators = 0.2 # Generators that are common among all scenarios
-    auxiliary_generators = 0.1 # Exploratative generators that see change every scenario
+    core_generators = 0.2 # Generators that are commonly modified across scenarios
+    auxiliary_generators = 0.1 # Subset of new generators that will be different per-scenario
 
     all_generators = collect(keys(current_active))
     n_generators = length(all_generators)
@@ -406,7 +432,7 @@ function generate_new_scenarios_subset_AC(current_active, current_reactive, sear
         # this set may intersect with our core generators???
         auxiliary_generators_to_modify = rand(all_generators, n_to_modify_auxiliary)
 
-        variation_percent = delta_AC(scenario_idx, search_parameters, 1, time_period)
+        variation_percent = delta_AC(search_parameters, method_choice, time_period)
         
         # Modify core generators
         for gen_id in core_generators_to_modify
@@ -556,16 +582,21 @@ Calculate variation factor for AC scenarios considering both active and reactive
 
 # Arguments
 - `search_parameters::Dict`: Helpful dictionary containing symbols that point to global data such as the iteration or our ref dictionary
--  `method_choice::Int64`: Choose how to generate local search variations. (1 for stochastic/0.05, 2 for dynamic gap. 
-    Temporal smoothing hasn't been implemented here I see...)
+-  `method_choice::Int64`: Choose how to generate local search variations.
+    - 1 for stochastic/0.05
+    - 2 for dynamic gap.
+    - 3 for Temporal Smoothing (not implemented, defaults to stochastic)
 - `time_period::Int64`: Current scenario's time period (for accessing hourly demands)
 
 # Returns
-- `delta::Float64`: A small floating point number that influences how much generators get modified by
+- `delta::Float64`: A small floating point number that influences by what percent generators get modified by
 """
 function delta_AC(search_parameters::Dict, method_choice::Int64, time_period::Int64)
-    # time_periods = length(search_parameters[:total_active_generation]) this line is unnused
-    
+    #= 
+    time_periods = length(search_parameters[:total_active_generation]) this line is unnused,
+    but could be implemented for error checking if decided it is necessary.
+    =#
+
     if search_parameters[:iteration] < 5
         factor = 0.05
     else

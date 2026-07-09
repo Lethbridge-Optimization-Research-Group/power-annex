@@ -4,6 +4,15 @@ module SearchModel
     using PowerModels, JuMP, Dates, Serialization, PlotlyJS, Ipopt, Graphs
     using Distributions, Statistics
     using LinearAlgebra
+    #=
+    Lots of functions are exported here, but of course not all of them are useful outside of the larger functions that call them.
+    I included them as it can be helpful to read a list of available functions when trying to experiment or when looking to tackle
+    adding to/modifying existing functions. 
+    The readme (if finished...) should contain an explanation and list of all the useful functions.
+    
+    If curious, all AC functions have been commented now, so you can hover over any function to get a thorough description.
+    =#
+
     # Export of aggregate_demand_data.jl
     export get_date_percentages, percentages_of_max_demand, parse_csv_data, get_hourly_average
     # Export of rampingCSVimplementation_DC.jl
@@ -12,6 +21,16 @@ module SearchModel
     # Export of rampingCSVimplementation_AC.jl
     export parse_ac_power_system_csv, calculate_power_factor, vector_magnitude, vector_angle, vector_to_power, perturb_power_vector, generate_ac_vector_demand_profile, generate_ac_vector_demand_csv, generate_power_system_csv_AC, 
             plot_demand_curve, plot_bus_power_scatter, plot_bus_pq_vectors
+    
+    # Export of graph_search_AC.jl
+    export AC_graph_search, test_scenarios_AC, build_new_graph_AC, calculate_path_cost_AC, get_generation_and_ramping_costs_AC, output_run_data_to_csv_AC,
+    generate_new_scenarios_subset_AC, delta_AC, find_largest_time_period_AC, build_and_optimize_largest_period_AC, test_feasibility_AC, shortest_path_AC, 
+    build_initial_graph_AC, add_weighted_edges_AC!, calculate_path_cost_AC, extract_solution_AC, graph_demands_and_generation_AC, output_run_data_to_csv_AC
+    
+    # Export of graph_search_DC.jl
+    export DC_graph_search, shortest_path, test_feasibility, calculate_path_cost, test_scenarios, find_largest_time_period, build_and_optimize_largest_period,
+    generate_new_scenarios_subset, delta, extract_power_flow_data, build_initial_graph, add_weighted_edges!, extract_solution, build_new_graph,
+    get_generation_and_ramping_costs, graph_demands_and_generation, output_run_data_to_csv
 
     # Export of this file
     export create_search_model, optimize_model, DCMPOPFSearchFactory, ACMPOPFSearchFactory

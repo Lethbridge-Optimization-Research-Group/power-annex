@@ -985,7 +985,7 @@ end
 """
     extract_solution_AC(graph, path)
 
-Extract AC solution from path, returning the generator values for active and reactive power, as well as the total generation cost
+Extract AC solution from shortest path, returning the generator values for active and reactive power, as well as the total generation cost
     for each time period (ramping not included).
 
 # Arguments

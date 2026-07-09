@@ -280,8 +280,6 @@ Test the feasibility of each node in a path by solving a power flow model.
 # Returns
 - `Vector{Int}` : List of infeasible node indices in the path
 """
-
-
 function test_feasibility(factory, path, graph, demands, ramping_data)
     
     infeasible_nodes = []
@@ -335,7 +333,6 @@ Calculate the total generation and ramping cost of a path in the graph.
 # Returns
 - `Dict{Symbol, Float64}` : Total, generation, and ramping costs
 """
-
 function calculate_path_cost(path, graph) 
 
     total_cost = 0.0
@@ -384,7 +381,6 @@ Validate and cost each proposed generator scenario.
 - `Vector{Tuple{Dict{Int64, Float64}, Float64}}` : Valid scenarios and costs
 - `Dict{Symbol, Int}` : Violation counts
 """
-
 function test_scenarios(data, factory, demand, ramping_data, random_scenarios)
 
     violations = Dict(
@@ -569,12 +565,19 @@ function generate_new_scenarios_subset(data, current_outputs, search_parameters,
     return random_scenarios
 end
 
+"""
+method coices:
+- 1 = Standard Random (0.05)
+- 2 = Dynamic Gap
+- 3 = Temporal Smoothing
+note: method choice 4 is not implemented yet (calculate based on change in objective function)
+"""
 function delta(scenario_idx, search_parameters, method_choice, time_period)
     
     # 1 = standard random approach
     # 2 = alpha technique (alpha = actual demand / total demand * some factor)
     # 3 = convolution technique (average of adjacent time periods / total demand * some factor)
-    # 4 = cost history (use change in objective function to determine delta)
+    # 4 = cost history (use change in objective function to determine delta) - Not implemented
     time_periods = length(search_parameters[:total_generation])
     if search_parameters[:iteration] < 0
         factor = 0.05
@@ -638,7 +641,6 @@ Extract generator values from a JuMP model.
 # Returns
 - `Dict{Int, Float64}` : Generator ID to output value
 """
-
 function extract_power_flow_data(model)
     
     m = value.(model.model[:pg])
@@ -658,7 +660,6 @@ Construct a graph with nodes and edges based on initial generator scenarios.
 # Returns
 - `MetaDiGraph{Int64, Float64}` : Graph with nodes for each scenario and period
 """
-
 function build_initial_graph(scenarios::Vector{Any}, time_periods)
     graph = MetaDiGraph()
     defaultweight!(graph, 1.0)
@@ -715,7 +716,6 @@ Add edges between nodes in adjacent time periods with ramping cost as weight.
 - `time_periods::Int` : Number of time periods
 - `ramping_data::Dict{String, Any}` : Ramping costs and limits
 """
-
 function add_weighted_edges!(graph, time_periods, ramping_data)
 
     ramp_costs = ramping_data["costs"]
@@ -761,7 +761,6 @@ Extract generator values and costs from a given path in the graph.
 # Returns
 - `Dict{Int, Dict{Symbol, Any}}` : Mapping from time period to generator values and cost
 """
-
 function extract_solution(graph, path)
 
     solution = Dict{Int, Dict{Symbol, Any}}()  # Dictionary to store node properties
@@ -789,7 +788,6 @@ Construct a new graph using updated generator scenarios.
 # Returns
 - `MetaDiGraph{Int64, Float64}` : Graph built from new scenarios
 """
-
 function build_new_graph(new_scenarios, time_periods) 
 
     new_graph = MetaDiGraph()
@@ -849,7 +847,6 @@ Compare cost breakdowns between the graph model and the full optimization model.
 # Returns
 - `Dict{Symbol, Float64}` : Breakdown of generation and ramping costs
 """
-
 function get_generation_and_ramping_costs(data, info, model)
 
     graph_model_generation_cost = info[:generation_cost]
@@ -894,7 +891,6 @@ Plot demand and generation output from both the graph model and optimal model.
 - `full_model::JuMP.Model` : Optimal solution model
 - `graph_solution::Dict{Int, Dict{Symbol, Any}}` : Generator outputs from graph path
 """
-
 function graph_demands_and_generation(demands, full_model, graph_solution)
 
     time_periods = length(graph_solution) - 2
@@ -945,7 +941,6 @@ Write summary and time-series data from a run to a CSV file.
 # Returns
 - `String` : Path to the output CSV file
 """
-
 function output_run_data_to_csv(data, file_path, demands, model, info)
     # Extract filename
     filename = split(file_path, "/") |> last

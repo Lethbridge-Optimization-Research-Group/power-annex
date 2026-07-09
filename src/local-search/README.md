@@ -1,3 +1,5 @@
+Hint: in vscode there is a button in the top right that enables preview mode for markdown files. It pretties things up quite a bit
+
 # Graph Search
 Primarily, this document will focus on the AC version of graph_search, but the procedure for DC is very similar and there is a demo of it inside search_main.jl. Let it also be known that (for graph_search_ac.jl at least) all functions have some kind of docstring attached which should be read when confused (hover over the function or type ?'function_name' into REPL). These docstrings outline the parameter data types, kwargs, return types, and functionality of the associated processes.
 

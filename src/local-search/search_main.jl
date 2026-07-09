@@ -44,7 +44,7 @@ hourly_demand_multipliers = get_date_percentages("./CSV/PUB_Demand_2025.csv", "2
 
 ramping_csv_file_AC = generate_ac_vector_demand_csv(data, output_dir, hourly_demand_multipliers) # You can optionally include a seed here
 
-ramping_data_AC, active_demands_AC, reactive_demands_AC = parse_ac_power_system_csv(ramping_csv_file_AC, matpower_file_path)
+ramping_data_AC, active_demands_AC, reactive_demands_AC = parse_AC_power_system_csv(ramping_csv_file_AC, matpower_file_path)
 
 global search_factory_AC = ACMPOPFSearchFactory(matpower_file_path, Ipopt.Optimizer)
 

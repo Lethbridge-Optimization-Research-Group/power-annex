@@ -1390,7 +1390,6 @@ end
     extract_power_flow_data_AC(model)
 
 Extract both active and reactive power generator values from AC model, returning them as symbols in a dictionary.
-Note: This function assumes only one time period, not entirely sure why it's here...
 
 # Symbols
 - `:active`

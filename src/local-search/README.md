@@ -29,15 +29,78 @@ PowerModels.calc_thermal_limits!(data)
 
 `ramping_data_AC, active_demands_AC, reactive_demands_AC = parse_ac_power_system_csv(ramping_csv_file_AC, matpower_file_path)`
 
-- 
+- Given the file path to the file we just generated, and the file path to our matpower case file (for verification), this reads the csv and returns three dictionaries with all of the ramping costs and limits, as well as the 24 hour demands (or whatever your time period is) for all generators.
 
-global search_factory_AC = ACMPOPFSearchFactory(matpower_file_path, Ipopt.Optimizer)
+`global search_factory_AC = ACMPOPFSearchFactory(matpower_file_path, Ipopt.Optimizer)`
 
-search_model_AC = create_search_model(search_factory_AC, t, ramping_data_AC, active_demands_AC, reactive_demands_AC)
+- Creates a factory that holds the matpower file and our desired optimizer to maintain consistency across the models we make in the optimization. This factory also allows type overriding for the next function 'create_search_model'. It would take more parameters and annoyance to remove the factory system instead of keeping it so we leave the current system in, despite concerns over excess complication especially in an experimental codebase.
 
-optimize!(search_model_AC.model)
+`search_model_AC = create_search_model(search_factory_AC, t, ramping_data_AC, active_demands_AC, reactive_demands_AC)`  
+`optimize!(search_model_AC.model)`
 
-global info_AC = AC_graph_search(data, search_factory_AC, active_demands_AC, reactive_demands_AC, ramping_data_AC, t)
+- This is creates a full model with no relaxations (to my knowledge) to be solved by a commercial solver. It doesn't use graph search but instead will be optimized for comparison with graph search models. The answer here *should* be the theoretical optimum, and will take into account the ramping data and demands for multiple periods we created. create_search_model is a relatively simple function, and works to set up model parameters like the data dictionary accessed via search_model_AC.model as an example, or set_model_variables! for JuMP priming. Most of these functions are in model-creation-helpers, which you can check out if trying to change the JuMP side of things.
 
-optimal_cost = objective_value(search_model_AC.model)
-graph_cost = info_AC[:cost]`
+`global info_AC = AC_graph_search(data, search_factory_AC, active_demands_AC, reactive_demands_AC, ramping_data_AC, t)`
+
+- When performing AC_graph_search, the function returns a dictionary with the following symbols as keys:  
+    `
+    :time
+    :graph
+    :path
+    :cost
+    :solution
+    :cost_history
+    :violations
+    :generation_cost
+    :ramping_cost
+    `  
+- In general, you should be able to understand what most of them represent without an explanation. The main focus will be on time (how long the function took) and cost which represents the final cost including ramping. AC_graph_search runs almost all of the other functions in the graph_search_AC.jl file, like delta_ac, build_and_optimize_largest_period_AC, etc. If you haven't read it, there is a research paper that explains how everything works (for DC not AC, but still relevant). After running the function, you should now have a solution which is feasible in AC space and you only need compare statistics from the return value. Essentially, that's all it takes to run ACMPOPF at the current moment.
+
+- The solution key returns a dictionary with the final generation values and node cost at each time period. So  
+`info[:solution][1][:active_generator_values]`  
+Returns a dictionary of time period 1's optimal solution.
+
+`optimal_cost = objective_value(search_model_AC.model)`  
+`graph_cost = info_AC[:cost]`
+
+- The last two lines of code are merely for comparison purposes to see whether graph search was able to produce an answer comparable to the commercial solver.
+
+At this point you know how to use the graph search algorithm, the next step is likely to make improvements on existing code or methods. Hopefully that shouldn't be too hard now that some documentation exists within the AC file regarding input data types, functionality and some lines to start looking around in comments at the top. If you plan to modify existing code, either adding new functions or splitting the main ac_graph_search function into smaller more modular bits, make sure to continue the docstring format -  
+(Triple quotation marks: """ ~ """) for future viewers and for self understanding as much as possible. 
+
+As well, be mindful that while Julia is a fast and smart language, you can still help the compiler optimize your code by giving everything types as much as possible (Ex. `foo::Int64`, `bar::String`), with the added benefit of helping other programmers be able to work with your data easier. 
+
+That was a long section, if you made it this far then thanks for reading, I hope it helps!
+
+## Graphing Results
+Sometimes you may want to create graphs of the result from the optimization for demo purposes or to visualize how any modifications made to the algorithm performed. Helpful tools like PlotlyJS allow in-editor graphs to be made easily, if there is something lacking from a graph or a new kind of graph desired, look up the library and consider pairing it with Dataframes for ease of use. 
+
+For our purposes, the following function comes in handy:
+
+`graph_demands_and_generation_AC(active_demands_AC, reactive_demands_AC, full_model, graph_solution)`
+
+- To gather the graph solution, you can use the info dict returned by AC_graph_search as follows: `graph = info[:graph]`  
+Then to get the model use the optimized one we made prior: `full_model = search_model_AC.model`  
+The active and reactive demands will be the same ones returned from: `parse_AC_power_system_csv`
+
+The function will then create 3 comparison graphs for us, and save them as png files
+
+## Making CSV data from outputs
+
+If, instead of graphing or using terminal commands to sift through data, you want to make a CSV file with all the results, the following command may be of use:
+
+`output_run_data_to_csv_AC(data, file_path, active_demands, reactive_demands, model, info)`
+
+- Most of the parameters should look familiar but I'll give a brief rundown again:
+    - data refers to a case dictionary created using the following sequence: 
+    ```
+    data = PowerModels.parse_file(factory.file_path)
+    PowerModels.standardize_cost_terms!(data, order=2)
+    PowerModels.calc_thermal_limits!(data)
+    ```
+    - file_path in this case refers to the folder where you want to *store* the new CSV
+    - active and reactive demands come from `parse_AC_power_system_csv`  
+    - model can be obtained via a previously created and optimized search model using `search_model_AC.model`  
+    - info refers to the returned dictionary from `AC_graph_search` 
+ 
+- The function will use other commands in your stead to gather necessary data from the results of our optimization such as generation and ramping costs before appending them to a buffer and spitting out a CSV with all the data one could want. This includes **graph path data**, **cost improvement metrics**, **graph iteration history**, **overall cost**, **ramping cost**, **generation cost**, **optimal vs graph solution cost**, **time comparisons**, **individual generator data**, **feasibility violations** and *more*. 

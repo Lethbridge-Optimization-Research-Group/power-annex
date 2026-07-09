@@ -19,7 +19,7 @@ module SearchModel
     export safe_parse_float, parse_power_system_csv, generate_power_system_csv, generate_daily_demand_csv, generate_daily_demand_profile
 
     # Export of rampingCSVimplementation_AC.jl
-    export parse_ac_power_system_csv, calculate_power_factor, vector_magnitude, vector_angle, vector_to_power, perturb_power_vector, generate_ac_vector_demand_profile, generate_ac_vector_demand_csv, generate_power_system_csv_AC, 
+    export parse_AC_power_system_csv, calculate_power_factor, vector_magnitude, vector_angle, vector_to_power, perturb_power_vector, generate_ac_vector_demand_profile, generate_ac_vector_demand_csv, generate_power_system_csv_AC, 
             plot_demand_curve, plot_bus_power_scatter, plot_bus_pq_vectors
     
     # Export of graph_search_AC.jl

@@ -1,6 +1,6 @@
 using CSV, DataFrames, Random
 """
-    Parse_ac_power_system_csv(file_path::String, matpower_file_path::String)
+    Parse_AC_power_system_csv(file_path::String, matpower_file_path::String)
 # Arguments
 - file_path: Path to the CSV file
 - matpower_file_path: Path to the MATPOWER file (used for verification)
@@ -15,7 +15,7 @@ using CSV, DataFrames, Random
 - `active_demands::Vector{Dict{Int,Float64}}`: A vector containing active demands for each time period
 - `reactive_demands::Vector{Dict{Int,Float64}}`: A vector containing reactive demands for each time period
 """
-function parse_ac_power_system_csv(file_path::String, matpower_file_path::String)
+function parse_AC_power_system_csv(file_path::String, matpower_file_path::String)
     csv_content = read(file_path, String)
     lines = split(csv_content, '\n')
     csv_case_name = strip(lines[1])

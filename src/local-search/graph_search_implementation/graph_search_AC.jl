@@ -2,11 +2,14 @@ using Graphs, MetaGraphs, Gurobi, JuMP, PlotlyJS
 
 #=
 Refer to the lines around 711 when looking to modify how solutions are tested for feasability.
-If Cutting Plane implementation is desired, this function is where it would make the biggest impact.
+The repeated optimization is a bottleneck to speed.
 Alternatively, around line 293 is a similar function that could see better constraint checking.
 
 Around line 318 when testing scenarios, a comment denotes the use of reactive demand feasability checks,
 however it is not implemented fully and and may lead to infeasible scenarios that could otherwise be made feasible.
+
+Line 890 has code for checking reactive ramping limits when weighting nodes in a graph. It isn't implemented yet
+due to incomplete information on reactive ramp limits (namely slack bus reactive injection limits/capabilities).
 =#
 
 #=
@@ -18,7 +21,6 @@ however it is not implemented fully and and may lead to infeasible scenarios tha
 
 #=
 - uncomment reactive fixing constraint
-- fix/ignore reactive ramping limits
 - reintroduce checking ramp limits before adding edges
 - double check logic for additional reactive demand scenarios
 =#
@@ -751,11 +753,14 @@ end
 """
     shortest_path_ac(graph, time_periods)
 
-Find the shortest path from source to sink in the AC graph.
+Find the shortest path from source to sink in the AC graph using Dijkstra's algorithm, considering ramp cost edge weights.
 
 # Arguments
 - `graph::MetaDiGraph`: The directed graph containing nodes and edges with weights
 - `time_periods::Int64`: The number of time periods in the optimization problem
+
+# Returns
+- `path::Vector{Int64}`: A vector of node indices representing the shortest path from source to sink. Returns `false` if no path exists.
 """
 function shortest_path_AC(graph::MetaDiGraph, time_periods::Int64)
     working_graph = deepcopy(graph)
@@ -791,11 +796,19 @@ function shortest_path_AC(graph::MetaDiGraph, time_periods::Int64)
 end
 
 """
-    build_initial_graph_ac(scenarios, time_periods)
+    build_initial_graph_AC(scenarios, time_periods)
 
 Construct initial AC graph with nodes containing both P and Q values.
+
+# Arguments
+- `scenarios::Vector{Vector{Any}}`: A vector of time periods, each containing the respective group of candidate scenario nodes.
+- `time_periods::Int64`: The number of time periods in the optimization problem
+
+# Returns
+- `graph::MetaDiGraph`: A directed graph with nodes representing scenarios. No edges exist save for between the source and sink nodes
+and their respective first and last time period nodes. (Ex. Node 0 connects to all time period 1 nodes)
 """
-function build_initial_graph_AC(scenarios::Vector{Any}, time_periods::Int64)
+function build_initial_graph_AC(scenarios::Vector{Vector{Any}}, time_periods::Int64)
     graph = MetaDiGraph()
     defaultweight!(graph, 1.0)
     
@@ -847,9 +860,16 @@ function build_initial_graph_AC(scenarios::Vector{Any}, time_periods::Int64)
 end
 
 """
-    add_weighted_edges_ac!(graph, time_periods, ramping_data)
+    add_weighted_edges_AC!(graph, time_periods, ramping_data)
 
-Add edges between adjacent time periods with AC ramping costs.
+Add edges between all adjacent time periods denoted by AC ramping costs.
+Current implementaton does not have reactive ramping limit consideration capability.
+The use of this function allows minimization of ramping costs to be considered when choosing a shortest path.
+
+# Arguments
+- `graph::MetaDiGraph`: The directed graph containing scenario nodes
+- `time_periods::Int64`: The number of time periods we are solving for
+- `ramping_data::Dict{String, Any}`: Dictionary containing ramp limits, ids and costs for generators
 """
 function add_weighted_edges_AC!(graph::MetaDiGraph, time_periods::Int64, ramping_data::Dict{String, Any})
     ramp_costs = ramping_data["costs"]
@@ -920,9 +940,16 @@ function add_weighted_edges_AC!(graph::MetaDiGraph, time_periods::Int64, ramping
 end
 
 """
-    calculate_path_cost_ac(path, graph)
+    calculate_path_cost_AC(path, graph)
 
-Calculate total cost for AC path including both generation and ramping costs.
+Calculate the total node + edge cost, and also return individually the ramping cost and generation cost of a path.
+
+# Arguments
+-   `path::Vector{Int64}`: A vector of node indices representing a path through the graph
+-   `graph::MetaDiGraph`: The directed graph containing nodes and edges with ramping cost weights
+
+# Returns
+-   `Dict{Symbol, Float64}`: A dictionary containing the total cost, generation cost, and ramping cost for the given path
 """
 function calculate_path_cost_AC(path::Vector{Int64}, graph::MetaDiGraph)
     total_cost = 0.0
@@ -956,9 +983,21 @@ function calculate_path_cost_AC(path::Vector{Int64}, graph::MetaDiGraph)
 end
 
 """
-    extract_solution_ac(graph, path)
+    extract_solution_AC(graph, path)
 
-Extract AC solution with both active and reactive power values from path.
+Extract AC solution from path, returning the generator values for active and reactive power, as well as the total generation cost
+    for each time period (ramping not included).
+
+# Arguments
+- `graph::MetaDiGraph`: The directed graph containing nodes with generator values and costs, as well as edges weighed by ramping costs.
+- `path::Vector{Int64}`: A vector of node indices representing a path through the graph
+
+# Returns
+- `solution::Dict{Int, Dict{Symbol, Any}}`: A time period-ordered dictionary containing 
+    the generator values and costs for each time period.
+    - `solution[time_period][:active_generator_values]`
+    - `solution[time_period][:reactive_generator_values]`
+    - `solution[time_period][:cost]`
 """
 function extract_solution_AC(graph::MetaDiGraph, path::Vector{Int64})
     solution = Dict{Int, Dict{Symbol, Any}}()
@@ -976,7 +1015,7 @@ function extract_solution_AC(graph::MetaDiGraph, path::Vector{Int64})
 end
 
 """
-    build_new_graph_ac(new_scenarios, time_periods)
+    build_new_graph_AC(new_scenarios, time_periods)
 
 Construct new AC graph using updated scenarios. The generated graph will have time_periods + 2 nodes,
 with a source node at time 0 and a sink node at time time_periods + 1. Each time period will have its own set of scenario nodes.
@@ -1043,7 +1082,7 @@ function build_new_graph_AC(new_scenarios::Vector{Vector{Any}}, time_periods::In
 end
 
 """
-    get_generation_and_ramping_costs_ac(data, info, model)
+    get_generation_and_ramping_costs_AC(data, info, model)
 
 Runs the cost calculations for both a provided graph search model and a full local search model
     by adding all generation costs multiplied by their coefficients, as well as the polynomial cost terms
@@ -1174,9 +1213,20 @@ function graph_demands_and_generation_AC(active_demands::Vector{Vector{Float64}}
 end
 
 """
-    output_run_data_to_csv_ac(data, file_path, active_demands, reactive_demands, model, info)
+    output_run_data_to_csv_AC(data, file_path, active_demands, reactive_demands, model, info)
 
 Write AC run summary and time-series data to CSV.
+
+# Arguments
+- `data::Dict{String, Any}`: The PowerModels case dictionary
+- `file_path::String`: The path to the folder where the CSV file will be written
+- `active_demands::Vector{Vector{Float64}}`: All active demands over all time periods
+- `reactive_demands::Vector{Vector{Float64}}`: All reactive demands over all time periods
+- `model::AbstractMPOPFModel`: The fully optimized model for comparison
+- `info::Dict{Symbol, Any}`: The optimized solution from AC_graph_search
+
+# Returns
+- `Filename::String`: The name of the written CSV file.
 """
 function output_run_data_to_csv_AC(data::Dict{String, Any}, file_path::String, active_demands::Vector{Vector{Float64}}, reactive_demands::Vector{Vector{Float64}}, model::AbstractMPOPFModel, info::Dict{Symbol, Any})
     filename = split(file_path, "/") |> last
@@ -1337,9 +1387,20 @@ function output_run_data_to_csv_AC(data::Dict{String, Any}, file_path::String, a
 end
 
 """
-    extract_power_flow_data_ac(model)
+    extract_power_flow_data_AC(model)
 
-Extract both active and reactive power generator values from AC model.
+Extract both active and reactive power generator values from AC model, returning them as symbols in a dictionary.
+Note: This function assumes only one time period, not entirely sure why it's here...
+
+# Symbols
+- `:active`
+- `:reactive`
+
+# Arguments
+- `model::AbstractMPOPFModel`: The solved AC model from which to extract generator values
+
+# Returns
+- `Dict{Symbol, Dict{Int64, Float64}}`: A dictionary containing two dictionaries used to access active and reactive generation.
 """
 function extract_power_flow_data_AC(model)
     pg_values = value.(model.model[:pg])

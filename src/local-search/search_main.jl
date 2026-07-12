@@ -1,15 +1,19 @@
 using JuMP, Ipopt, Gurobi, Serialization, Random, Graphs, MetaGraphs, MathOptInterface
-using PowerModels
+using PowerModels, Statistics, Plots, GraphRecipes, DataFrames
+include("SearchModel.jl")
 using .SearchModel # Local module
-using Statistics, Plots, GraphRecipes
+#= 
+Note that include functions will allow relative pathing from the folder they are executed (in this case the local-search folder)
+but when assigning file paths to below variables, the are relative to the environment/REPL, not the file you run them in.
+=#
 
 # This file is an example for how to run GraphSearch and compare to a standard local-search MPOPF
 
-matpower_file_path = "../cases/case14.m"
+matpower_file_path = "src/cases/case14.m"
 
 t = 24 # Current functions only support up to 24 time periods
 
-output_dir = "./CSV"
+output_dir = "src/local-search/CSV/"
 
 # Makes the reference dictionary
 data = PowerModels.parse_file(matpower_file_path)
@@ -40,7 +44,7 @@ graph_cost = info_DC[:cost]
 
 ### AC ###
 
-hourly_demand_multipliers = get_date_percentages("./CSV/PUB_Demand_2025.csv", "2025-10-01") # Makes demand curve from public data files
+hourly_demand_multipliers = get_date_percentages("src/local-search/CSV/PUB_Demand_2025.csv", "2025-10-01") # Makes demand curve from public data files
 
 ramping_csv_file_AC = generate_ac_vector_demand_csv(data, output_dir, hourly_demand_multipliers) # You can optionally include a seed here
 
@@ -50,7 +54,8 @@ global search_factory_AC = ACMPOPFSearchFactory(matpower_file_path, Ipopt.Optimi
 
 search_model_AC = create_search_model(search_factory_AC, t, ramping_data_AC, active_demands_AC, reactive_demands_AC)
 
-optimize!(search_model_AC.model)
+optimize_model(search_model_AC)
+# Alternatively: JuMP.optimize!(search_model_AC.model)
 
 global info_AC = AC_graph_search(data, search_factory_AC, active_demands_AC, reactive_demands_AC, ramping_data_AC, t)
 

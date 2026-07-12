@@ -5,11 +5,12 @@ Primarily, this document will focus on the AC version of graph_search, but the p
 
 ## Utilization
 To use AC graph search, I'll list the functions needed in order and provide some explanation on them.
+It says so already in search_main.jl, but to re-state: The file paths given are relative to your environment being set to the base power-annex folder.
 
 ```
-matpower_file_path = "../cases/case14.m"
+matpower_file_path = "src/cases/case14.m"
 t = 24
-output_dir = "./CSV"
+output_dir = "src/local-search/CSV"
 data = PowerModels.parse_file(matpower_file_path)
 PowerModels.standardize_cost_terms!(data, order=2)
 PowerModels.calc_thermal_limits!(data)
@@ -36,7 +37,7 @@ PowerModels.calc_thermal_limits!(data)
 - Creates a factory that holds the matpower file and our desired optimizer to maintain consistency across the models we make in the optimization. This factory also allows type overriding for the next function 'create_search_model'. It would take more parameters and annoyance to remove the factory system instead of keeping it so we leave the current system in, despite concerns over excess complication especially in an experimental codebase.
 
 `search_model_AC = create_search_model(search_factory_AC, t, ramping_data_AC, active_demands_AC, reactive_demands_AC)`  
-`optimize!(search_model_AC.model)`
+`optimize_model(search_model_AC)` or `JuMP.optimize!(search_model_AC.model)` works the same, but doesn't print the best cost.
 
 - This is creates a full model with no relaxations (to my knowledge) to be solved by a commercial solver. It doesn't use graph search but instead will be optimized for comparison with graph search models. The answer here *should* be the theoretical optimum, and will take into account the ramping data and demands for multiple periods we created. create_search_model is a relatively simple function, and works to set up model parameters like the data dictionary accessed via search_model_AC.model as an example, or set_model_variables! for JuMP priming. Most of these functions are in model-creation-helpers, which you can check out if trying to change the JuMP side of things.
 
@@ -73,7 +74,7 @@ As well, be mindful that while Julia is a fast and smart language, you can still
 That was a long section, if you made it this far then thanks for reading, I hope it helps!
 
 ## Graphing Results
-Sometimes you may want to create graphs of the result from the optimization for demo purposes or to visualize how any modifications made to the algorithm performed. Helpful tools like PlotlyJS allow in-editor graphs to be made easily, if there is something lacking from a graph or a new kind of graph desired, look up the library and consider pairing it with Dataframes for ease of use. 
+Sometimes you may want to create graphs of the result from the optimization for demo purposes or to visualize how any modifications made to the algorithm performed. Helpful tools like the Plots package or PlotlyJS allow in-editor graphs to be made easily, if there is something lacking from a graph or a new kind of graph desired, look up the library and consider pairing it with Dataframes for ease of use. 
 
 For our purposes, the following function comes in handy:
 

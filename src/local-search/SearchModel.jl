@@ -1,8 +1,8 @@
 
 module SearchModel
-    using CSV, DataFrames, Random
-    using PowerModels, JuMP, Dates, Serialization, PlotlyJS, Ipopt, Graphs
-    using Distributions, Statistics
+    using CSV, DataFrames, Random, Plots, Statistics
+    using PowerModels, JuMP, Dates, Serialization, Ipopt, GraphRecipes, Graphs
+    using Distributions, Statistics, MetaGraphs
     using LinearAlgebra
     #=
     Lots of functions are exported here, but of course not all of them are useful outside of the larger functions that call them.
@@ -15,6 +15,7 @@ module SearchModel
 
     # Export of aggregate_demand_data.jl
     export get_date_percentages, percentages_of_max_demand, parse_csv_data, get_hourly_average
+    
     # Export of rampingCSVimplementation_DC.jl
     export safe_parse_float, parse_power_system_csv, generate_power_system_csv, generate_daily_demand_csv, generate_daily_demand_profile
 

@@ -1,4 +1,4 @@
-using Graphs, MetaGraphs, Gurobi, JuMP, PlotlyJS
+using Graphs, MetaGraphs, Gurobi, JuMP
 
 #=
 Refer to the lines around 711 when looking to modify how solutions are tested for feasability.
@@ -191,7 +191,7 @@ function AC_graph_search(data, factory, active_demands, reactive_demands, rampin
 
         # Generate new scenarios for each time period
         for i in 1:time_periods
-            scenarios_for_period = generate_new_scenarios_subset_AC(data, current_active_values[i], 
+            scenarios_for_period = generate_new_scenarios_subset_AC(current_active_values[i], 
                                                                    current_reactive_values[i],
                                                                    search_parameters, i)
             tested_scenarios, scenario_violations = test_scenarios_AC(data, factory, 
@@ -249,8 +249,10 @@ function AC_graph_search(data, factory, active_demands, reactive_demands, rampin
 
         # Convergence check
         if iteration > 10
-            recent_costs = search_parameters[:cost_history][iteration - 10:iteration-1]
+            recent_costs = search_parameters[:cost_history][end - 10:end-1]
             improvement = best_cost / maximum(recent_costs)
+            
+            popfirst!(search_parameters[:cost_history]) # Keep only the last 10 to save space
 
             if improvement > 0.999
                 println("No improvement, stopping at $iteration iterations")
@@ -644,8 +646,8 @@ Find the time period with the highest combined active and reactive demand.
 
 # Arguments
 - `time_periods::Int64`: Number of time periods total
-- `active_demands::Vector{Vector{Float64}}`: All active demands over all time periods
-- `reactive_demands::Vector{Vector{Float64}}`: All reactive demands over all time periods
+- `active_demands::Vector{Dict{Int64, Float64}}`: All active demands over all time periods
+- `reactive_demands::Vector{Dict{Int64, Float64}}`: All reactive demands over all time periods
 
 # Returns
 - `largest_index::Int64`: A single integer representing the time period with the greatest demand
@@ -678,8 +680,8 @@ Build and optimize an AC power flow model for the peak demand period, setting a 
 
 # Arguments
 - `factory::AbstractMPOPFModelFactory`: The desired model factory, typically MPOPFSearchFactory
-- `active_demand::Vector{Float64}`: Demands for generators in the largest time period.
-- `reactive_demand::Vector{Float64}`: Same as above but for the imaginary portion
+- `active_demand::Dict{Int64, Float64}`: Demands for generators in the largest time period.
+- `reactive_demand::Dict{Int64, Float64}`: Same as above but for the imaginary portion
 - `ramping_data::Dict{String, Any}`: Dictionary containing ramp limits, ids and costs for generators in the Matpower case
 
 # Returns
@@ -699,7 +701,7 @@ function build_and_optimize_largest_period_AC(factory, active_demand, reactive_d
 end
 
 """
-    test_feasibility_ac(factory, path, graph, active_demands, reactive_demands, ramping_data)
+    test_feasibility_AC(factory, path, graph, active_demands, reactive_demands, ramping_data)
 
 Test the feasibility of each node in a path by solving an AC power flow model.
 
@@ -708,18 +710,20 @@ towards reducing or removing the need to test feasibility in this manner*
 
 # Arguments
 - `factory::AbstractMPOPFModelFactory`: The model's factory for use in making and optimizing the scenario path we desire
-- `path::Int64[]`: An array of integer nodes representing a particular shortest path in our scenario graph
+- `path::Vector{Int64}`: An array of integer nodes representing a particular shortest path in our scenario graph
 - `graph::MetaDiGraph`: A graph defined using MetaGraphs package containing our scenario nodes and edges
-- `active_demands::Vector{Vector{Float64}}`: All active demands across all time periods
-- `reactive_demands::Vector{Vector{Float64}}`: All reactive demands across all time periods
+- `active_demands::Vector{Dict{Int64, Float64}}`: All active demands across all time periods
+- `reactive_demands::Vector{Dict{Int64, Float64}}`: All reactive demands across all time periods
 - `ramping_data::Dict{String, Any}: A dictionary containing ramp limits, ids and costs for generators.`
 
 # Returns
 - `infeasible_nodes::Vector{Int64}`: A vector containing any nodes which make our current path infeasible.
 """
-function test_feasibility_AC(factory::AbstractMPOPFModelFactory, path::Int64[], graph::MetaDiGraph, active_demands::Vector{Vector{Float64}}, reactive_demands::Vector{Vector{Float64}}, ramping_data::Dict{String, Any})
+function test_feasibility_AC(factory::AbstractMPOPFModelFactory, path::Vector{Int64}, graph::MetaDiGraph, active_demands::Vector{Dict{Int64, Float64}}, reactive_demands::Vector{Dict{Int64, Float64}}, ramping_data::Dict{String, Any})
     infeasible_nodes = []
-
+    if(length(path) != (length(active_demands) + 2)) # path should have length t for every time, plus 2 for source and sink nodes
+        return infeasible_nodes
+    end
     for node in path[2:end-1]
         time_period = get_prop(graph, node, :time_period)
         active_values = get_prop(graph, node, :active_generator_values)
@@ -751,7 +755,7 @@ end
 # Additional helper functions for AC formulation...
 
 """
-    shortest_path_ac(graph, time_periods)
+    shortest_path_AC(graph, time_periods)
 
 Find the shortest path from source to sink in the AC graph using Dijkstra's algorithm, considering ramp cost edge weights.
 
@@ -801,14 +805,14 @@ end
 Construct initial AC graph with nodes containing both P and Q values.
 
 # Arguments
-- `scenarios::Vector{Vector{Any}}`: A vector of time periods, each containing the respective group of candidate scenario nodes.
+- `scenarios::Vector{Any}`: A vector of time periods, each containing the respective group of candidate scenario nodes.
 - `time_periods::Int64`: The number of time periods in the optimization problem
 
 # Returns
 - `graph::MetaDiGraph`: A directed graph with nodes representing scenarios. No edges exist save for between the source and sink nodes
 and their respective first and last time period nodes. (Ex. Node 0 connects to all time period 1 nodes)
 """
-function build_initial_graph_AC(scenarios::Vector{Vector{Any}}, time_periods::Int64)
+function build_initial_graph_AC(scenarios::Vector{Any}, time_periods::Int64)
     graph = MetaDiGraph()
     defaultweight!(graph, 1.0)
     
@@ -1149,15 +1153,15 @@ end
 Plot AC demand and generation output comparisons.
 
 # Arguments
-- `active_demands::Vector{Vector{Float64}}`: All active demands over all time periods
-- `reactive_demands::Vector{Vector{Float64}}`: All reactive demands over all time periods
+- `active_demands::Vector{Dict{Int64, Float64}}`: All active demands over all time periods
+- `reactive_demands::Vector{Dict{Int64, Float64}}`: All reactive demands over all time periods
 - `full_model::AbstractMPOPFModel`: The full MPOPF model to be compared against
 - `graph_solution::MetaDiGraph`: The optimized graph solution returned by AC_graph_search
 
 # Output
-- Displays and saves comparative graphs generated with (I believe) PlotlyJS
+- Displays and saves comparative graphs
 """
-function graph_demands_and_generation_AC(active_demands::Vector{Vector{Float64}}, reactive_demands::Vector{Vector{Float64}}, full_model::AbstractMPOPFModel, graph_solution::MetaDiGraph)
+function graph_demands_and_generation_AC(active_demands::Vector{Dict{Int64, Float64}}, reactive_demands::Vector{Dict{Int64, Float64}}, full_model::AbstractMPOPFModel, graph_solution::MetaDiGraph)
     time_periods = length(graph_solution) - 2
     
     # Extract active power outputs
@@ -1220,15 +1224,15 @@ Write AC run summary and time-series data to CSV.
 # Arguments
 - `data::Dict{String, Any}`: The PowerModels case dictionary
 - `file_path::String`: The path to the folder where the CSV file will be written
-- `active_demands::Vector{Vector{Float64}}`: All active demands over all time periods
-- `reactive_demands::Vector{Vector{Float64}}`: All reactive demands over all time periods
+- `active_demands::Vector{Dict{Int64, Float64}}`: All active demands over all time periods
+- `reactive_demands::Vector{Dict{Int64, Float64}}`: All reactive demands over all time periods
 - `model::AbstractMPOPFModel`: The fully optimized model for comparison
 - `info::Dict{Symbol, Any}`: The optimized solution from AC_graph_search
 
 # Returns
 - `Filename::String`: The name of the written CSV file.
 """
-function output_run_data_to_csv_AC(data::Dict{String, Any}, file_path::String, active_demands::Vector{Vector{Float64}}, reactive_demands::Vector{Vector{Float64}}, model::AbstractMPOPFModel, info::Dict{Symbol, Any})
+function output_run_data_to_csv_AC(data::Dict{String, Any}, file_path::String, active_demands::Vector{Dict{Int64, Float64}}, reactive_demands::Vector{Dict{Int64, Float64}}, model::AbstractMPOPFModel, info::Dict{Symbol, Any})
     filename = split(file_path, "/") |> last
     time_periods = length(info[:solution]) - 2
     

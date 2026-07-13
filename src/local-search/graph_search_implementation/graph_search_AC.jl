@@ -5,11 +5,10 @@ Refer to the lines around 711 when looking to modify how solutions are tested fo
 The repeated optimization is a bottleneck to speed.
 Alternatively, around line 293 is a similar function that could see better constraint checking.
 
-Around line 318 when testing scenarios, a comment denotes the use of reactive demand feasability checks,
-however it is not implemented fully and and may lead to infeasible scenarios that could otherwise be made feasible.
+Around line 318 when testing scenarios, a comment denotes the use of reactive demand feasability checks in a strange way.
+Likely needs double checking
 
-Line 890 has code for checking reactive ramping limits when weighting nodes in a graph. It isn't implemented yet
-due to incomplete information on reactive ramp limits (namely slack bus reactive injection limits/capabilities).
+Line 890 has code for checking reactive ramping limits when weighting nodes in a graph.
 =#
 
 #=
@@ -323,11 +322,6 @@ function test_scenarios_AC(data, factory, active_demand, reactive_demand, rampin
         # For reactive power, we need to consider that demand can be negative and generators can supply/absorb
         # Check if total reactive capability can meet the demand (considering both positive and negative)
 
-        #=
-        The above is true, but not sufficiently implemented. We never check to see if generators/slack buses can
-        absorb or meet reactive demand. Currently I'm not sure how to test that myself though.
-        =#
-
         total_reactive_generation = sum(values(reactive_scenario))
         if abs(total_reactive_generation) < abs(minimum_reactive_demand) && 
            sign(total_reactive_generation) != sign(minimum_reactive_demand) &&
@@ -398,8 +392,11 @@ end
                                     scenarios_to_generate=15, method_choice=1, up_probability=0.3)
 
 Given a current best-scenario time period, generate a subset of new scenarios (for the same time period) by randomly modifying
-the given active and reactive power values of generators. This is a key part of the local search portion of our graph search algorithm, 
+the given active values of generators. This is a key part of the local search portion of our graph search algorithm, 
 where nearby scenarios are created to explore the solution space.
+
+- Note: Currently, reactive generation exploration is disabled. The slack bus should in theory be able to meet reactive
+demands without generator interference.
 
 # Arguments
 - `current_active::Dict{Int64, Float64}`: Current active power values for generators in the given time period
@@ -465,40 +462,40 @@ function generate_new_scenarios_subset_AC(current_active::Dict{Int64, Float64}, 
             pmax = data["gen"][string(gen_id)]["pmax"]
             new_active[gen_id] = clamp(new_p, pmin, pmax)
             
-            # Modify reactive power - ensure we can meet reactive demand
-            current_q = current_reactive[gen_id]
-            qmin = data["gen"][string(gen_id)]["qmin"]
-            qmax = data["gen"][string(gen_id)]["qmax"]
-            
-            # Use larger variation for reactive power and bias toward demand requirements
-            max_q_variation = max(abs(current_q) * variation_percent, abs(qmax - qmin) * 0.1)
-            q_variation = rand() * max_q_variation
-            
-            # Get reactive demand info to bias generation
-            reactive_demand_total = get(search_parameters, :total_reactive_demand, [0.0])[time_period]
-            reactive_gen_total = get(search_parameters, :total_reactive_generation, [0.0])[time_period]
-            
-            # Bias toward meeting reactive demand
-            reactive_bias = 0.5
-            if abs(reactive_demand_total) > 0.001
-                if reactive_gen_total < reactive_demand_total
-                    # Need more positive reactive power
-                    up_probability_q = up_probability + reactive_bias
-                else
-                    # Need less reactive power
-                    up_probability_q = up_probability - reactive_bias
-                end
-            else
-                up_probability_q = 0.5  # No bias if no significant reactive demand
-            end
-            
-            new_q = if rand() < clamp(up_probability_q, 0.1, 0.9)
-                current_q + q_variation
-            else
-                current_q - q_variation
-            end
-            
-            new_reactive[gen_id] = clamp(new_q, qmin, qmax)
+            #     # Modify reactive power - ensure we can meet reactive demand
+            #     current_q = current_reactive[gen_id]
+            #     qmin = data["gen"][string(gen_id)]["qmin"]
+            #     qmax = data["gen"][string(gen_id)]["qmax"]
+                
+            #     # Use larger variation for reactive power and bias toward demand requirements
+            #     max_q_variation = max(abs(current_q) * variation_percent, abs(qmax - qmin) * 0.1)
+            #     q_variation = rand() * max_q_variation
+                
+            #     # Get reactive demand info to bias generation
+            #     reactive_demand_total = get(search_parameters, :total_reactive_demand, [0.0])[time_period]
+            #     reactive_gen_total = get(search_parameters, :total_reactive_generation, [0.0])[time_period]
+                
+            #     # Bias toward meeting reactive demand
+            #     reactive_bias = 0.5
+            #     if abs(reactive_demand_total) > 0.001
+            #         if reactive_gen_total < reactive_demand_total
+            #             # Need more positive reactive power
+            #             up_probability_q = up_probability + reactive_bias
+            #         else
+            #             # Need less reactive power
+            #             up_probability_q = up_probability - reactive_bias
+            #         end
+            #     else
+            #         up_probability_q = 0.5  # No bias if no significant reactive demand
+            #     end
+                
+            #     new_q = if rand() < clamp(up_probability_q, 0.1, 0.9)
+            #         current_q + q_variation
+            #     else
+            #         current_q - q_variation
+            #     end
+                
+            #     new_reactive[gen_id] = clamp(new_q, qmin, qmax)
         end
 
         # Modify auxiliary generators
@@ -519,35 +516,35 @@ function generate_new_scenarios_subset_AC(current_active::Dict{Int64, Float64}, 
             new_active[gen_id] = clamp(new_p, pmin, pmax)
             
             # Reactive power variation with demand bias
-            current_q = current_reactive[gen_id]
-            qmin = data["gen"][string(gen_id)]["qmin"]
-            qmax = data["gen"][string(gen_id)]["qmax"]
-            
-            max_q_variation = max(abs(current_q) * variation_percent, abs(qmax - qmin) * 0.05)
-            q_variation = rand() * max_q_variation
-            
-            # Apply same reactive demand bias
-            reactive_demand_total = get(search_parameters, :total_reactive_demand, [0.0])[time_period]
-            reactive_gen_total = get(search_parameters, :total_reactive_generation, [0.0])[time_period]
-            
-            reactive_bias = 0.3  # Less bias for auxiliary generators
-            if abs(reactive_demand_total) > 0.001
-                if reactive_gen_total < reactive_demand_total
-                    up_probability_q = up_probability + reactive_bias
-                else
-                    up_probability_q = up_probability - reactive_bias
-                end
-            else
-                up_probability_q = 0.5
-            end
-            
-            new_q = if rand() < clamp(up_probability_q, 0.1, 0.9)
-                current_q + q_variation
-            else
-                current_q - q_variation
-            end
-            
-            new_reactive[gen_id] = clamp(new_q, qmin, qmax)
+            #     current_q = current_reactive[gen_id]
+            #     qmin = data["gen"][string(gen_id)]["qmin"]
+            #     qmax = data["gen"][string(gen_id)]["qmax"]
+
+            #     max_q_variation = max(abs(current_q) * variation_percent, abs(qmax - qmin) * 0.05)
+            #     q_variation = rand() * max_q_variation
+
+            #     # Apply same reactive demand bias
+            #     reactive_demand_total = get(search_parameters, :total_reactive_demand, [0.0])[time_period]
+            #     reactive_gen_total = get(search_parameters, :total_reactive_generation, [0.0])[time_period]
+
+            #     reactive_bias = 0.3  # Less bias for auxiliary generators
+            #     if abs(reactive_demand_total) > 0.001
+            #         if reactive_gen_total < reactive_demand_total
+            #             up_probability_q = up_probability + reactive_bias
+            #         else
+            #             up_probability_q = up_probability - reactive_bias
+            #         end
+            #     else
+            #         up_probability_q = 0.5
+            #     end
+
+            #     new_q = if rand() < clamp(up_probability_q, 0.1, 0.9)
+            #         current_q + q_variation
+            #     else
+            #         current_q - q_variation
+            #     end
+
+            #     new_reactive[gen_id] = clamp(new_q, qmin, qmax)
         end
         
         push!(random_scenarios, (new_active, new_reactive))
@@ -557,33 +554,33 @@ function generate_new_scenarios_subset_AC(current_active::Dict{Int64, Float64}, 
     push!(random_scenarios, (current_active, current_reactive))
     
     # Generate additional scenarios specifically to meet reactive demand if needed
-    reactive_demand_total = get(search_parameters, :total_reactive_demand, [0.0])[time_period]
-    reactive_gen_total = sum(values(current_reactive))
+    # reactive_demand_total = get(search_parameters, :total_reactive_demand, [0.0])[time_period]
+    # reactive_gen_total = sum(values(current_reactive))
     
-    if abs(reactive_demand_total) > 0.001 && abs(reactive_gen_total - reactive_demand_total) > abs(reactive_demand_total) * 0.1
-        println("Generating additional scenarios to meet reactive demand (current: $reactive_gen_total, needed: $reactive_demand_total)")
+    # if abs(reactive_demand_total) > 0.001 && abs(reactive_gen_total - reactive_demand_total) > abs(reactive_demand_total) * 0.1
+    #     println("Generating additional scenarios to meet reactive demand (current: $reactive_gen_total, needed: $reactive_demand_total)")
         
-        for extra_idx in 1:5  # Generate a few extra scenarios
-            new_active = copy(current_active)
-            new_reactive = copy(current_reactive)
+    #     for extra_idx in 1:5  # Generate a few extra scenarios
+    #         new_active = copy(current_active)
+    #         new_reactive = copy(current_reactive)
             
-            # Adjust reactive power to better match demand
-            reactive_shortfall = reactive_demand_total - reactive_gen_total
-            reactive_adjustment_per_gen = reactive_shortfall / length(all_generators)
+    #         # Adjust reactive power to better match demand
+    #         reactive_shortfall = reactive_demand_total - reactive_gen_total
+    #         reactive_adjustment_per_gen = reactive_shortfall / length(all_generators)
             
-            for gen_id in all_generators
-                qmin = data["gen"][string(gen_id)]["qmin"]
-                qmax = data["gen"][string(gen_id)]["qmax"]
+    #         for gen_id in all_generators
+    #             qmin = data["gen"][string(gen_id)]["qmin"]
+    #             qmax = data["gen"][string(gen_id)]["qmax"]
                 
-                # Add some randomness to the adjustment
-                adjustment = reactive_adjustment_per_gen * (0.5 + rand())
-                new_q = current_reactive[gen_id] + adjustment
-                new_reactive[gen_id] = clamp(new_q, qmin, qmax)
-            end
+    #             # Add some randomness to the adjustment
+    #             adjustment = reactive_adjustment_per_gen * (0.5 + rand())
+    #             new_q = current_reactive[gen_id] + adjustment
+    #             new_reactive[gen_id] = clamp(new_q, qmin, qmax)
+    #         end
             
-            push!(random_scenarios, (new_active, new_reactive))
-        end
-    end
+    #         push!(random_scenarios, (new_active, new_reactive))
+    #     end
+    # end
     println(random_scenarios[1])
     
     return random_scenarios
@@ -867,8 +864,8 @@ end
     add_weighted_edges_AC!(graph, time_periods, ramping_data)
 
 Add edges between all adjacent time periods denoted by AC ramping costs.
-Current implementaton does not have reactive ramping limit consideration capability.
 The use of this function allows minimization of ramping costs to be considered when choosing a shortest path.
+Keep in mind, reactive power does not (in the current state) influence cost, so it is not part of our edge weighting
 
 # Arguments
 - `graph::MetaDiGraph`: The directed graph containing scenario nodes
@@ -885,11 +882,9 @@ function add_weighted_edges_AC!(graph::MetaDiGraph, time_periods::Int64, ramping
 
         for node_n in nodes_n
             active_values_n = get_prop(graph, node_n, :active_generator_values)
-            reactive_values_n = get_prop(graph, node_n, :reactive_generator_values)
             
             for node_n1 in nodes_n1
                 active_values_n1 = get_prop(graph, node_n1, :active_generator_values)
-                reactive_values_n1 = get_prop(graph, node_n1, :reactive_generator_values)
                 
                 total_edge_cost = 0
                 violates = false
@@ -905,23 +900,6 @@ function add_weighted_edges_AC!(graph::MetaDiGraph, time_periods::Int64, ramping
                         break
                     end
                 end
-                
-                #= Check ramping constraints for reactive power (if applicable)
-                if !violates && haskey(ramping_data, "reactive_ramp_limits")
-                    reactive_ramp_limits = ramping_data["reactive_ramp_limits"]
-                    reactive_ramp_costs = get(ramping_data, "reactive_ramp_costs", ramp_costs)
-                    
-                    for gen_id in keys(reactive_values_n)
-                        reactive_difference = abs(reactive_values_n[gen_id] - reactive_values_n1[gen_id])
-                        
-                        if reactive_difference <= reactive_ramp_limits[gen_id]
-                            total_edge_cost += reactive_difference * reactive_ramp_costs[gen_id] * 0.1  # Weight reactive ramping less
-                        else
-                            violates = true
-                            break
-                        end
-                    end
-                end=#
                 
                 if !violates
                     add_edge!(graph, node_n, node_n1)
@@ -939,7 +917,6 @@ function add_weighted_edges_AC!(graph::MetaDiGraph, time_periods::Int64, ramping
             end
         end
         println("Created $edge_count edges from period $n to $(n+1)\n")
-      
     end
 end
 
@@ -1114,7 +1091,7 @@ function get_generation_and_ramping_costs_AC(data::Dict{String, Any}, info::Dict
     # Sum total generation costs (active + reactive power)
     for t in 1:T, g in keys(gen_data)
         p_val = value(model.model[:pg][t,g])
-        q_val = value(model.model[:qg][t,g])
+        # q_val = value(model.model[:qg][t,g])
         
         # Active power cost
         search_model_generation_cost += 
@@ -1122,13 +1099,13 @@ function get_generation_and_ramping_costs_AC(data::Dict{String, Any}, info::Dict
             gen_data[g]["cost"][2] * p_val +
             gen_data[g]["cost"][3]
             
-        # Reactive power cost (if available)
-        if haskey(gen_data[g], "qcost") && !isempty(gen_data[g]["qcost"])
-            search_model_generation_cost += 
-                gen_data[g]["qcost"][1] * q_val^2 +
-                gen_data[g]["qcost"][2] * q_val +
-                gen_data[g]["qcost"][3]
-        end
+            # # Reactive power cost (if available)
+            # if haskey(gen_data[g], "qcost") && !isempty(gen_data[g]["qcost"])
+            #     search_model_generation_cost += 
+            #         gen_data[g]["qcost"][1] * q_val^2 +
+            #         gen_data[g]["qcost"][2] * q_val +
+            #         gen_data[g]["qcost"][3]
+            # end
     end
 
     # Sum total ramping costs (active power ramping)

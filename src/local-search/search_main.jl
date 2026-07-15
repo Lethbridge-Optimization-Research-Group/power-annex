@@ -27,20 +27,20 @@ global time_vec = []
 
 ### DC ###
 
-ramping_csv_file_DC = generate_daily_demand_csv(data, output_dir)
+# ramping_csv_file_DC = generate_daily_demand_csv(data, output_dir)
 
-ramping_data_DC, demands_DC = parse_power_system_csv(ramping_csv_file_DC, matpower_file_path)
+# ramping_data_DC, demands_DC = parse_power_system_csv(ramping_csv_file_DC, matpower_file_path)
 
-global search_factory_DC = DCMPOPFSearchFactory(matpower_file_path, Gurobi.Optimizer)
-search_model_DC = create_search_model(search_factory_DC, t, ramping_data_DC, demands_DC)
+# global search_factory_DC = DCMPOPFSearchFactory(matpower_file_path, Gurobi.Optimizer)
+# search_model_DC = create_search_model(search_factory_DC, t, ramping_data_DC, demands_DC)
 
-optimize!(search_model_DC.model)
+# optimize!(search_model_DC.model)
 
-global info_DC = DC_graph_search(data, search_factory_DC, demands_DC, ramping_data_DC, t)
+# global info_DC = DC_graph_search(data, search_factory_DC, demands_DC, ramping_data_DC, t)
 
-#filename = split(matpower_file_path, "/") |> last
-optimal_cost = objective_value(search_model_DC.model)
-graph_cost = info_DC[:cost]
+# #filename = split(matpower_file_path, "/") |> last
+# optimal_cost = objective_value(search_model_DC.model)
+# graph_cost = info_DC[:cost]
 
 ### AC ###
 

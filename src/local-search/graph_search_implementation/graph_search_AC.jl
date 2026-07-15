@@ -718,9 +718,6 @@ towards reducing or removing the need to test feasibility in this manner*
 """
 function test_feasibility_AC(factory::AbstractMPOPFModelFactory, path::Vector{Int64}, graph::MetaDiGraph, active_demands::Vector{Dict{Int64, Float64}}, reactive_demands::Vector{Dict{Int64, Float64}}, ramping_data::Dict{String, Any})
     infeasible_nodes = []
-    if(length(path) != (length(active_demands) + 2)) # path should have length t for every time, plus 2 for source and sink nodes
-        return infeasible_nodes
-    end
     for node in path[2:end-1]
         time_period = get_prop(graph, node, :time_period)
         active_values = get_prop(graph, node, :active_generator_values)

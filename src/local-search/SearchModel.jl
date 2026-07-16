@@ -125,6 +125,7 @@ module SearchModel
         PowerModels.calc_thermal_limits!(data)
 
         model = JuMP.Model(factory.optimizer)
+        set_optimizer_attributes(model, "print_level" => 5, "nlp_scaling_method" => "gradient-based", "nlp_scaling_max_gradient" => 100.0)
 
         power_flow_model = ACMPOPFSearchModel(model, data, time_periods, ramping_data, active_demands, reactive_demands)
 

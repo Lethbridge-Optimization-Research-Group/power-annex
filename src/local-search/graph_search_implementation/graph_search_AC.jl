@@ -1,14 +1,8 @@
 using Graphs, MetaGraphs, Gurobi, JuMP
 
 #=
-Refer to the lines around 711 when looking to modify how solutions are tested for feasability.
-The repeated optimization is a bottleneck to speed.
-Alternatively, around line 293 is a similar function that could see better constraint checking.
-
-Around line 318 when testing scenarios, a comment denotes the use of reactive demand feasability checks in a strange way.
-Likely needs double checking
-
-Line 890 has code for checking reactive ramping limits when weighting nodes in a graph.
+Refer to test_feasibility_AC when looking to modify how solutions are tested for feasability.
+line 512 - Experiment on reactive power
 =#
 
 #=
@@ -25,7 +19,7 @@ Line 890 has code for checking reactive ramping limits when weighting nodes in a
 =#
 
 """
-    AC_graph_search(data, factory, active_demands, reactive_demands, ramping_data, time_periods)
+    AC_graph_search(data, factory, active_demands, reactive_demands, ramping_data, time_periods; max_it)
 
 Create an AC graph model that iteratively adjusts generator values 
 in order to form a solution.
@@ -37,6 +31,7 @@ in order to form a solution.
 - `reactive_demands::Vector{Dict{Int64, Float64}}` : Reactive power demands for each time period
 - `ramping_data::Dict{String, Any}` : Ramping costs and limits for each generator
 - `time_periods::Int` : Number of time periods 
+- `max_it::Int64` : A kwarg to specify the desired max iteration count (default 40)
 
 # Returns 
 - `info::Dict{Symbol, Any}` : Final model solution information and associated data.
@@ -55,10 +50,12 @@ Access with `info[:parameter]`
 :ramping_cost
 `
 """
-function AC_graph_search(data, factory, active_demands, reactive_demands, ramping_data, time_periods)
+function AC_graph_search(data::Dict{String, Any}, factory::ACMPOPFSearchFactory, active_demands::Vector{Dict{Int64, Float64}}, 
+    reactive_demands::Vector{Dict{Int64, Float64}}, ramping_data::Dict{String, Any}, time_periods::Int64; 
+    max_it::Int64 = 40)
     
     iteration = 1
-    max_iterations = 500
+    max_iterations = max_it
     
     start_time = time()
 
@@ -190,9 +187,10 @@ function AC_graph_search(data, factory, active_demands, reactive_demands, rampin
 
         # Generate new scenarios for each time period
         for i in 1:time_periods
-            scenarios_for_period = generate_new_scenarios_subset_AC(current_active_values[i], 
+            scenarios_for_period =  generate_new_scenarios_subset_AC(current_active_values[i], 
                                                                    current_reactive_values[i],
                                                                    search_parameters, i)
+
             tested_scenarios, scenario_violations = test_scenarios_AC(data, factory, 
                                                                      active_demands[i], 
                                                                      reactive_demands[i],
@@ -212,6 +210,7 @@ function AC_graph_search(data, factory, active_demands, reactive_demands, rampin
 
         feasibility = false
 
+        # Run shortest path, test feasibility only of the nodes in the path, then remove ones that don't work and rerun
         while !feasibility
             path = shortest_path_AC(new_graph, time_periods)
 
@@ -397,6 +396,7 @@ where nearby scenarios are created to explore the solution space.
 
 - Note: Currently, reactive generation exploration is disabled. The slack bus should in theory be able to meet reactive
 demands without generator interference.
+- Note 2: After running a small simulation, indeed disabling the reactive modification still allows optimality to be approached
 
 # Arguments
 - `current_active::Dict{Int64, Float64}`: Current active power values for generators in the given time period
@@ -462,40 +462,40 @@ function generate_new_scenarios_subset_AC(current_active::Dict{Int64, Float64}, 
             pmax = data["gen"][string(gen_id)]["pmax"]
             new_active[gen_id] = clamp(new_p, pmin, pmax)
             
-            #     # Modify reactive power - ensure we can meet reactive demand
-            #     current_q = current_reactive[gen_id]
-            #     qmin = data["gen"][string(gen_id)]["qmin"]
-            #     qmax = data["gen"][string(gen_id)]["qmax"]
-                
-            #     # Use larger variation for reactive power and bias toward demand requirements
-            #     max_q_variation = max(abs(current_q) * variation_percent, abs(qmax - qmin) * 0.1)
-            #     q_variation = rand() * max_q_variation
-                
-            #     # Get reactive demand info to bias generation
-            #     reactive_demand_total = get(search_parameters, :total_reactive_demand, [0.0])[time_period]
-            #     reactive_gen_total = get(search_parameters, :total_reactive_generation, [0.0])[time_period]
-                
-            #     # Bias toward meeting reactive demand
-            #     reactive_bias = 0.5
-            #     if abs(reactive_demand_total) > 0.001
-            #         if reactive_gen_total < reactive_demand_total
-            #             # Need more positive reactive power
-            #             up_probability_q = up_probability + reactive_bias
-            #         else
-            #             # Need less reactive power
-            #             up_probability_q = up_probability - reactive_bias
-            #         end
+            # Modify reactive power - ensure we can meet reactive demand
+            # current_q = current_reactive[gen_id]
+            # qmin = data["gen"][string(gen_id)]["qmin"]
+            # qmax = data["gen"][string(gen_id)]["qmax"]
+            
+            # # Use larger variation for reactive power and bias toward demand requirements
+            # max_q_variation = max(abs(current_q) * variation_percent, abs(qmax - qmin) * 0.1)
+            # q_variation = rand() * max_q_variation
+            
+            # # Get reactive demand info to bias generation
+            # reactive_demand_total = get(search_parameters, :total_reactive_demand, [0.0])[time_period]
+            # reactive_gen_total = get(search_parameters, :total_reactive_generation, [0.0])[time_period]
+            
+            # # Bias toward meeting reactive demand
+            # reactive_bias = 0.5
+            # if abs(reactive_demand_total) > 0.001
+            #     if reactive_gen_total < reactive_demand_total
+            #         # Need more positive reactive power
+            #         up_probability_q = up_probability + reactive_bias
             #     else
-            #         up_probability_q = 0.5  # No bias if no significant reactive demand
+            #         # Need less reactive power
+            #         up_probability_q = up_probability - reactive_bias
             #     end
-                
-            #     new_q = if rand() < clamp(up_probability_q, 0.1, 0.9)
-            #         current_q + q_variation
-            #     else
-            #         current_q - q_variation
-            #     end
-                
-            #     new_reactive[gen_id] = clamp(new_q, qmin, qmax)
+            # else
+            #     up_probability_q = 0.5  # No bias if no significant reactive demand
+            # end
+            
+            # new_q = if rand() < clamp(up_probability_q, 0.1, 0.9)
+            #     current_q + q_variation
+            # else
+            #     current_q - q_variation
+            # end
+            
+            # new_reactive[gen_id] = clamp(new_q, qmin, qmax)
         end
 
         # Modify auxiliary generators
@@ -701,9 +701,6 @@ end
     test_feasibility_AC(factory, path, graph, active_demands, reactive_demands, ramping_data)
 
 Test the feasibility of each node in a path by solving an AC power flow model.
-
-*This method is a current bottleneck to algorithm speed. Further research would be best directed
-towards reducing or removing the need to test feasibility in this manner*
 
 # Arguments
 - `factory::AbstractMPOPFModelFactory`: The model's factory for use in making and optimizing the scenario path we desire

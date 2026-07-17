@@ -394,10 +394,6 @@ Given a current best-scenario time period, generate a subset of new scenarios (f
 the given active values of generators. This is a key part of the local search portion of our graph search algorithm, 
 where nearby scenarios are created to explore the solution space.
 
-- Note: Currently, reactive generation exploration is disabled. The slack bus should in theory be able to meet reactive
-demands without generator interference.
-- Note 2: After running a small simulation, indeed disabling the reactive modification still allows optimality to be approached
-
 # Arguments
 - `current_active::Dict{Int64, Float64}`: Current active power values for generators in the given time period
 - `current_reactive::Dict{Int64, Float64}`: Current reactive power values for generators in the given time period
@@ -737,6 +733,7 @@ function test_feasibility_AC(factory::AbstractMPOPFModelFactory, path::Vector{In
         if status != MOI.LOCALLY_SOLVED && status != MOI.OPTIMAL
             push!(infeasible_nodes, node)
             continue
+        else set_prop()
         end
     end
 

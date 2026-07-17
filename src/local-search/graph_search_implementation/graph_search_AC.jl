@@ -696,7 +696,8 @@ end
 """
     test_feasibility_AC(factory, path, graph, active_demands, reactive_demands, ramping_data)
 
-Test the feasibility of each node in a path by solving an AC power flow model.
+Test the feasibility of each node in a path by solving an AC power flow model. If the node has been solved before
+and was found feasible, skip it. Otherwise evaluate it and mark as evaluated to save future computation.
 
 # Arguments
 - `factory::AbstractMPOPFModelFactory`: The model's factory for use in making and optimizing the scenario path we desire

@@ -712,28 +712,31 @@ Test the feasibility of each node in a path by solving an AC power flow model.
 function test_feasibility_AC(factory::AbstractMPOPFModelFactory, path::Vector{Int64}, graph::MetaDiGraph, active_demands::Vector{Dict{Int64, Float64}}, reactive_demands::Vector{Dict{Int64, Float64}}, ramping_data::Dict{String, Any})
     infeasible_nodes = []
     for node in path[2:end-1]
-        time_period = get_prop(graph, node, :time_period)
-        active_values = get_prop(graph, node, :active_generator_values)
-        reactive_values = get_prop(graph, node, :reactive_generator_values)
+        if((get_prop(graph, node, :evaluated)) == false)
 
-        model = create_search_model(factory, 1, ramping_data, [active_demands[time_period]], [reactive_demands[time_period]])
+            time_period = get_prop(graph, node, :time_period)
+            active_values = get_prop(graph, node, :active_generator_values)
+            reactive_values = get_prop(graph, node, :reactive_generator_values)
 
-        # Fix both active and reactive power values
-        for (gen_id, p_value) in active_values
-            fix(model.model[:pg][1, gen_id], p_value, force=true)
-        end
-        
-        for (gen_id, q_value) in reactive_values
-            fix(model.model[:qg][1, gen_id], q_value, force=true)
-        end
-        
-        optimize!(model.model)
-        status = termination_status(model.model)
+            model = create_search_model(factory, 1, ramping_data, [active_demands[time_period]], [reactive_demands[time_period]])
 
-        if status != MOI.LOCALLY_SOLVED && status != MOI.OPTIMAL
-            push!(infeasible_nodes, node)
-            continue
-        else set_prop()
+            # Fix both active and reactive power values
+            for (gen_id, p_value) in active_values
+                fix(model.model[:pg][1, gen_id], p_value, force=true)
+            end
+            
+            for (gen_id, q_value) in reactive_values
+                fix(model.model[:qg][1, gen_id], q_value, force=true)
+            end
+            
+            optimize!(model.model)
+            status = termination_status(model.model)
+
+            if status != MOI.LOCALLY_SOLVED && status != MOI.OPTIMAL
+                push!(infeasible_nodes, node)
+                continue
+            else set_prop!(graph, node, :evaluated, true)
+            end
         end
     end
 
@@ -807,6 +810,7 @@ function build_initial_graph_AC(scenarios::Vector{Any}, time_periods::Int64)
     # Add source node
     add_vertex!(graph)
     first_node = nv(graph)
+    set_prop!(graph, first_node, :evaluated, true) # We never need to evaluate the source node
     set_prop!(graph, first_node, :time_period, 0)
     set_prop!(graph, first_node, :active_generator_values, Dict{Int64, Float64}())
     set_prop!(graph, first_node, :reactive_generator_values, Dict{Int64, Float64}())
@@ -817,6 +821,7 @@ function build_initial_graph_AC(scenarios::Vector{Any}, time_periods::Int64)
             add_vertex!(graph)
             current_node = nv(graph)
             
+            set_prop!(graph, current_node, :evaluated, false)
             set_prop!(graph, current_node, :time_period, p)
             set_prop!(graph, current_node, :active_generator_values, scenario[1])   # Active power values
             set_prop!(graph, current_node, :reactive_generator_values, scenario[2]) # Reactive power values
@@ -827,6 +832,8 @@ function build_initial_graph_AC(scenarios::Vector{Any}, time_periods::Int64)
     # Add sink node
     add_vertex!(graph)
     last_node = nv(graph)
+
+    set_prop!(graph, last_node, :evaluated, true) # We won't ever need to evaluate the sink node
     set_prop!(graph, last_node, :time_period, time_periods + 1)
     set_prop!(graph, last_node, :active_generator_values, Dict{Int64, Float64}())
     set_prop!(graph, last_node, :reactive_generator_values, Dict{Int64, Float64}())
@@ -1009,6 +1016,8 @@ function build_new_graph_AC(new_scenarios::Vector{Vector{Any}}, time_periods::In
     # Add source node
     add_vertex!(new_graph)
     source_node = nv(new_graph) # Stands for number of vertices. Not sure why it isn't hard coded as 1 in this case, but I won't touch it.
+
+    set_prop!(new_graph, source_node, :evaluated, true) # We don't need to evaluate the source/sink nodes
     set_prop!(new_graph, source_node, :time_period, 0)
     set_prop!(new_graph, source_node, :active_generator_values, Dict{Int64, Float64}())
     set_prop!(new_graph, source_node, :reactive_generator_values, Dict{Int64, Float64}())
@@ -1019,6 +1028,8 @@ function build_new_graph_AC(new_scenarios::Vector{Vector{Any}}, time_periods::In
         for (s, scenario) in enumerate(new_scenarios[t])
             add_vertex!(new_graph)
             current_node = nv(new_graph)
+
+            set_prop!(new_graph, current_node, :evaluated, false)
             set_prop!(new_graph, current_node, :time_period, t)
             set_prop!(new_graph, current_node, :active_generator_values, scenario[1])
             set_prop!(new_graph, current_node, :reactive_generator_values, scenario[2])
@@ -1029,6 +1040,8 @@ function build_new_graph_AC(new_scenarios::Vector{Vector{Any}}, time_periods::In
     # Add sink node
     add_vertex!(new_graph)
     sink_node = nv(new_graph)
+
+    set_prop!(new_graph, sink_node, :evaluated, true)
     set_prop!(new_graph, sink_node, :time_period, time_periods + 1)
     set_prop!(new_graph, sink_node, :active_generator_values, Dict{Int64, Float64}())
     set_prop!(new_graph, sink_node, :reactive_generator_values, Dict{Int64, Float64}())

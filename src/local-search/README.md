@@ -41,7 +41,7 @@ PowerModels.calc_thermal_limits!(data)
 
 - This is creates a full model with no relaxations (to my knowledge) to be solved by a commercial solver. It doesn't use graph search but instead will be optimized for comparison with graph search models. The answer here *should* be the theoretical optimum, and will take into account the ramping data and demands for multiple periods we created. create_search_model is a relatively simple function, and works to set up model parameters like the data dictionary accessed via search_model_AC.model as an example, or set_model_variables! for JuMP priming. Most of these functions are in model-creation-helpers, which you can check out if trying to change the JuMP side of things.
 
-`global info_AC = AC_graph_search(data, search_factory_AC, active_demands_AC, reactive_demands_AC, ramping_data_AC, t)`
+`global info_AC = AC_graph_search(data, search_factory_AC, active_demands_AC, reactive_demands_AC, ramping_data_AC, t; max_it = 1)`
 
 - When performing AC_graph_search, the function returns a dictionary with the following symbols as keys:  
     `
@@ -55,7 +55,14 @@ PowerModels.calc_thermal_limits!(data)
     :generation_cost
     :ramping_cost
     `  
-- In general, you should be able to understand what most of them represent without an explanation. The main focus will be on time (how long the function took) and cost which represents the final cost including ramping. AC_graph_search runs almost all of the other functions in the graph_search_AC.jl file, like delta_ac, build_and_optimize_largest_period_AC, etc. If you haven't read it, there is a research paper that explains how everything works (for DC not AC, but still relevant). After running the function, you should now have a solution which is feasible in AC space and you only need compare statistics from the return value. Essentially, that's all it takes to run ACMPOPF at the current moment.
+- In general, you should be able to understand what most of them represent without an explanation. The main focus will be on time (how long the function took) and cost which represents the final cost including ramping. AC_graph_search runs almost all of the other functions in the graph_search_AC.jl file, like delta_ac, build_and_optimize_largest_period_AC, etc. If you haven't read it, there is a research paper that explains how everything works (for DC not AC, but still relevant). 
+
+- Some modifications have been made to this function:  
+    - 1: Nodes in the shortest path are now marked after evaluation so they aren't re-evaluated during subsequent iterations or if infeasible nodes are removed and new ones are interchanged into the path
+    - 2: It has been clarified that the reactive constraint only needs to be added as a JuMP variable for modification of the power variable (S). We don't have additional costs/ramping/vector-perturbing to worry about since elements of a power grid in real life can inject reactive power almost freely. (It doesn't cost effort to make imaginary power the same way it does for real)
+    - 3: The max_it argument in graph_search_AC is trivial if you are familiar with the algorithm, but it should be known that since the current implementation runs into **severe** slowdown during later iterations, it is necessary to limit it to only ~ 1-5 runs, otherwise it could calculate for an hour and return no result
+
+- After running the function, you should now have a solution which is feasible in AC space and you only need compare statistics from the return value.
 
 - The solution key returns a dictionary with the final generation values and node cost at each time period. So  
 `info[:solution][1][:active_generator_values]`  

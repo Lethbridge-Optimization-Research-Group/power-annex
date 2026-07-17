@@ -57,7 +57,7 @@ search_model_AC = create_search_model(search_factory_AC, t, ramping_data_AC, act
 optimize_model(search_model_AC)
 # Alternatively: JuMP.optimize!(search_model_AC.model)
 
-global info_AC = AC_graph_search(data, search_factory_AC, active_demands_AC, reactive_demands_AC, ramping_data_AC, t; max_it = 1)
+global info_AC = AC_graph_search(data, search_factory_AC, active_demands_AC, reactive_demands_AC, ramping_data_AC, t; max_it = 5)
 
 optimal_cost = objective_value(search_model_AC.model)
 graph_cost = info_AC[:cost]

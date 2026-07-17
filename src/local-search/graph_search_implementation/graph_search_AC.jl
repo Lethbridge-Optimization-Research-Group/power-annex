@@ -731,11 +731,11 @@ function test_feasibility_AC(factory::AbstractMPOPFModelFactory, path::Vector{In
             
             optimize!(model.model)
             status = termination_status(model.model)
+            set_prop!(graph, node, :evaluated, true)
 
             if status != MOI.LOCALLY_SOLVED && status != MOI.OPTIMAL
                 push!(infeasible_nodes, node)
                 continue
-            else set_prop!(graph, node, :evaluated, true)
             end
         end
     end

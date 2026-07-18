@@ -107,7 +107,7 @@ function AC_graph_search(data::Dict{String, Any}, factory::ACMPOPFSearchFactory,
     search_parameters[:total_active_generation] = fill(baseline_total_active, time_periods)
     search_parameters[:total_reactive_generation] = fill(baseline_total_reactive, time_periods)
 
-    # Generate initial scenarios with both P and Q
+    # Generate initial scenarios
     initial_scenarios_raw = generate_new_scenarios_subset_AC(baseline_active_values, baseline_reactive_values,
                                                            search_parameters, 1)
 

@@ -29,7 +29,7 @@ function set_model_objective_function!(power_flow_model::ACMPOPFSearchModel)
     
     @objective(model, Min,
     sum(sum(ref[:gen][g]["cost"][1]*pg[t,g]^2 + ref[:gen][g]["cost"][2]*pg[t,g] + ref[:gen][g]["cost"][3] for g in keys(ref[:gen])) for t in 1:T) +
-    sum(ramping_data["costs"][g] * (ramp_up[t, g] + ramp_down[t, g]) for g in keys(ref[:gen]) for t in 2:T) 
+    sum(ramping_data["costs"][g] * (ramp_up[t, g] + ramp_down[t, g]) for g in keys(ref[:gen]) for t in 2:T)
     )
 end
 

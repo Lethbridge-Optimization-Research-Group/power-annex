@@ -9,8 +9,8 @@
 
 
 #= configuration variables =#
-CASE_DIR = "/Users/shidratulmuntaha/power-annex/.github/workflows/cases/"
-CASE_FILE = "case118.m"
+CASE_DIR = "/Users/shidratulmuntaha/power-annex/.github/workflows/"
+CASE_FILE = "case14.m"
 ROOT_DIR = "/Users/shidratulmuntaha/power-annex/"
 
 #= ***********
@@ -19,11 +19,16 @@ include first the files with the needed functions
 =#
 include(ROOT_DIR * "src/basemodels-org/B-uncertainty_ac_opf.jl")
 include(ROOT_DIR * "src/util-org/read_case.jl")
+include(ROOT_DIR * "src/uncertainty-org/B-read_uncertainty.jl")
 
 #= build the ref dictionary with the case data
 =#
 ref = read_case(CASE_DIR * CASE_FILE)
 
+UNCERTAINTY_DIR = ROOT_DIR * "B-uncertainty_data/"
+uncertainty = read_uncertainty(
+    UNCERTAINTY_DIR * "B-case14.csv"
+)
 ####### ** Uncertainty scaling factor **
 lambda = 3.4  #Maximum feasible load scaling factor for this system-2.1
 
@@ -79,7 +84,7 @@ result = solve_model_ac!(ref, model,lambda)
 
 # ### **increase the lambda 5% on each time
 lambda=1.0
-for sim = 1:100
+for sim = 1:5
 
     println("\nSimulation ", sim)
     println("lambda = ", round(lambda, digits=3))
@@ -123,3 +128,15 @@ end
 # println("Execution time for optimization: $(result[:time_sec]) sec")
 
 # println("Power flow on lines: $(result[:p_arcs])")
+
+println("==========================================")
+println("   Uncertainty Data for IEEE 14-Bus")
+println("==========================================")
+println("Bus ID\tMean (μ)\tStd Dev (σ)")
+println("------------------------------------------")
+
+for (bus, data) in sort(collect(uncertainty), by = x -> x[1])
+    println("$(bus)\t$(data.mu)\t\t$(data.sigma)")
+end
+
+println("==========================================")

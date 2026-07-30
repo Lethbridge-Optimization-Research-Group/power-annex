@@ -1,6 +1,8 @@
 using CSV
 using DataFrames
 
+## for demand_uncertainty
+
 function read_uncertainty(filename)
 
     df = CSV.read(filename, DataFrame)
@@ -19,6 +21,8 @@ function read_uncertainty(filename)
     return uncertainty
 
 end
+
+##for read_renewable_uncertainty
 
 function read_renewable_uncertainty(filename)
 

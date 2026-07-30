@@ -23,11 +23,34 @@ include(ROOT_DIR * "src/uncertainty-org/B-read_uncertainty.jl")
 
 #= build the ref dictionary with the case data
 =#
+# ==========================================
+# Read the network case
+# ==========================================
 ref = read_case(CASE_DIR * CASE_FILE)
 
+# ==========================================
+# Read uncertainty data
+# ==========================================
 UNCERTAINTY_DIR = ROOT_DIR * "B-uncertainty_data/"
-uncertainty = read_uncertainty(
+
+# Demand uncertainty
+demand = read_uncertainty(
     UNCERTAINTY_DIR * "B-case14.csv"
+)
+
+# Renewable uncertainty
+renewable = read_renewable_uncertainty(
+    UNCERTAINTY_DIR * "B-case14_renewable.csv"
+)
+
+# ==========================================
+# Store everything together
+# ==========================================
+uncertainty = Dict(
+    :case_name => CASE_FILE,
+    :case => ref,
+    :demand => demand,
+    :renewable => renewable
 )
 ####### ** Uncertainty scaling factor **
 lambda = 3.4  #Maximum feasible load scaling factor for this system-2.1
@@ -130,13 +153,26 @@ end
 # println("Power flow on lines: $(result[:p_arcs])")
 
 println("==========================================")
-println("   Uncertainty Data for IEEE 14-Bus")
+println("      UNCERTAINTY INFORMATION")
 println("==========================================")
-println("Bus ID\tMean (μ)\tStd Dev (σ)")
-println("------------------------------------------")
 
-for (bus, data) in sort(collect(uncertainty), by = x -> x[1])
+println("\nCASE")
+println("------------------------------------------")
+println(CASE_FILE)
+
+println("\nDEMAND UNCERTAINTY")
+println("------------------------------------------")
+println("Bus ID\tMean (μ)\tStd Dev (σ)")
+
+for (bus, data) in sort(collect(uncertainty[:demand]), by = x -> x[1])
     println("$(bus)\t$(data.mu)\t\t$(data.sigma)")
 end
 
+println("\nRENEWABLE UNCERTAINTY")
+println("------------------------------------------")
+println("Gen ID\tBus ID\tMean (μ)\tStd Dev (σ)")
+
+for (gen, data) in sort(collect(uncertainty[:renewable]), by = x -> x[1])
+    println("$(gen)\t$(data.bus_id)\t$(data.mu)\t\t$(data.sigma)")
+end
 println("==========================================")

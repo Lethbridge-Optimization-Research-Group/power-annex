@@ -730,12 +730,14 @@ function test_feasibility_AC(factory::AbstractMPOPFModelFactory, path::Vector{In
                 fix(model.model[:qg][1, gen_id], q_value, force=true)
             end
             
+            set_time_limit_sec(model.model, 2) # If its evaluating more than 2 seconds its probably lost
             optimize!(model.model)
             status = termination_status(model.model)
             set_prop!(graph, node, :evaluated, true)
 
             if status != MOI.LOCALLY_SOLVED && status != MOI.OPTIMAL
                 push!(infeasible_nodes, node)
+                print(solution_summary(model.model; verbose = true))
                 continue
             end
         end

@@ -1,7 +1,9 @@
 using JuMP, Ipopt, Gurobi, Serialization, Random, Graphs, MetaGraphs, MathOptInterface
 using PowerModels, Statistics, Plots, GraphRecipes, DataFrames
 include("SearchModel.jl")
-using .SearchModel # Local module
+using .SearchModel # Local module. Remember since we use this, you have to restart REPL and rerun this code
+# each time a modification is made to the code in SearchModel.jl
+
 #= 
 Note that include functions will allow relative pathing from the folder they are executed (in this case the local-search folder)
 but when assigning file paths to below variables, the are relative to the environment/REPL, not the file you run them in.
@@ -20,10 +22,11 @@ data = PowerModels.parse_file(matpower_file_path)
 PowerModels.standardize_cost_terms!(data, order=2)
 PowerModels.calc_thermal_limits!(data)
 
-global total_cost_diffs = []
-global ramping_costs_diffs = []
-global iterations_vec = []
-global time_vec = []
+# # These are used in some commented-out code below
+# global total_cost_diffs = []
+# global ramping_costs_diffs = []
+# global iterations_vec = []
+# global time_vec = []
 
 ### DC ###
 

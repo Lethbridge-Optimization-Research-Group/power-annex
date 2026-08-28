@@ -31,7 +31,9 @@ in order to form a solution.
 - `reactive_demands::Vector{Dict{Int64, Float64}}` : Reactive power demands for each time period
 - `ramping_data::Dict{String, Any}` : Ramping costs and limits for each generator
 - `time_periods::Int` : Number of time periods 
-- `max_it::Int64` : A kwarg to specify the desired max iteration count (default 40)
+- `max_it::Int64` : A kwarg to specify the desired max iteration count (default 40 arbitrarily)
+- `cross_period_subset::Float64` : kwarg specifying percent of generators to stabilize over a scenario's time periods (default 0.3)
+- `scenario_count::Int64` : kwarg specifying how many scenarios to generate every time period (default 15)
 
 # Returns 
 - `info::Dict{Symbol, Any}` : Final model solution information and associated data.
@@ -52,7 +54,7 @@ Access with `info[:parameter]`
 """
 function AC_graph_search(data::Dict{String, Any}, factory::ACMPOPFSearchFactory, active_demands::Vector{Dict{Int64, Float64}}, 
     reactive_demands::Vector{Dict{Int64, Float64}}, ramping_data::Dict{String, Any}, time_periods::Int64; 
-    max_it::Int64 = 40)
+    max_it::Int64 = 40, cross_period_subset::Float64 = 0.3, scenario_count::Int64 = 15)
     
     iteration = 1
     max_iterations = max_it
@@ -109,7 +111,7 @@ function AC_graph_search(data::Dict{String, Any}, factory::ACMPOPFSearchFactory,
 
     # Generate initial scenarios
     initial_scenarios_raw = generate_new_scenarios_subset_AC(baseline_active_values, baseline_reactive_values,
-                                                           search_parameters, 1)
+                                                           search_parameters, 1; scenarios_to_generate = scenario_count)
 
     scenarios, scenario_violations = test_scenarios_AC(data, factory, active_demands[highest_demand], 
                                                       reactive_demands[highest_demand], ramping_data, 
@@ -185,15 +187,29 @@ function AC_graph_search(data::Dict{String, Any}, factory::ACMPOPFSearchFactory,
             push!(new_scenarios, Vector{Any}())
         end
 
+        # cross_period_gens will contain a randomized subset of generators for each
+        # Scenario which will not see modification across time periods to prevent
+        # otherwise feasible scenarios from flip flopping too much outside of feasibility
+        cross_period_gens = Vector{Vector{Int64}}(undef, scenario_count)
+        all_generators = collect(keys(current_active_values[1]))
+        n_generators = length(all_generators)
+    
+        n_to_modify = max(1, round(Int, n_generators * cross_period_subset))
+        
+        for s in 1:scenario_count
+            cross_period_gens[s] = rand(all_generators, n_to_modify)
+        end
+
         # Generate new scenarios for each time period
-        for i in 1:time_periods
-            scenarios_for_period =  generate_new_scenarios_subset_AC(current_active_values[i], 
-                                                                   current_reactive_values[i],
-                                                                   search_parameters, i)
+        for t in 1:time_periods
+            scenarios_for_period =  generate_new_scenarios_subset_AC(current_active_values[t], 
+                                                                   current_reactive_values[t],
+                                                                   search_parameters, t; scenarios_to_generate = scenario_count, 
+                                                                   stable_gens = cross_period_gens)
 
             tested_scenarios, scenario_violations = test_scenarios_AC(data, factory, 
-                                                                     active_demands[i], 
-                                                                     reactive_demands[i],
+                                                                     active_demands[t], 
+                                                                     reactive_demands[t],
                                                                      ramping_data, 
                                                                      scenarios_for_period)
             
@@ -202,7 +218,7 @@ function AC_graph_search(data::Dict{String, Any}, factory::ACMPOPFSearchFactory,
                 violations[key] += value
             end
             
-            new_scenarios[i] = tested_scenarios
+            new_scenarios[t] = tested_scenarios
         end
 
         new_graph = build_new_graph_AC(new_scenarios, time_periods)
@@ -278,14 +294,16 @@ end
     test_scenarios_AC(data, factory, active_demand, reactive_demand, ramping_data, random_scenarios)
 
 Validate proposed AC generator scenarios by checking simple demand bounds. Return only those scenarios that are valid,
-along with their associated costs.
+along with their associated costs. 
+
+!!! Note: Doesn't currently check ramp limits. 
 
 # Arguments
 - `data::Dict{String, Any}`: PowerModels data
 - `factory::ACMPOPFSearchFactory`: Model factory
 - `active_demand::Dict{Int64, Float64}`: Active demand for a specific time period
 - `reactive_demand::Dict{Int64, Float64}`: Reactive demand for a specific time period
-- `ramping_data::Dict{String, Any}`: Ramping info
+- `ramping_data::Dict{String, Any}`: Ramping Limit and cost info
 - `random_scenarios::Vector{Tuple{Dict{Int64, Float64}, Dict{Int64, Float64}}}`: AC scenarios to test
 
 # Returns
@@ -388,24 +406,29 @@ end
 
 """
     generate_new_scenarios_subset_AC(current_active, current_reactive, search_parameters, time_period; 
-                                    scenarios_to_generate=15, method_choice=1, up_probability=0.3)
+                                    scenarios_to_generate=15, core_percentage=0.3, 
+                                    auxiliary_percentage=0.1, method_choice=1, up_probability=0.3, 
+                                    stable_gens=[])
 
 Given a current best-scenario time period, generate a subset of new scenarios (for the same time period) by randomly modifying
 the given active values of generators. This is a key part of the local search portion of our graph search algorithm, 
 where nearby scenarios are created to explore the solution space.
 
 # Arguments
-- `current_active::Dict{Int64, Float64}`: Current active power values for generators in the given time period
-- `current_reactive::Dict{Int64, Float64}`: Current reactive power values for generators in the given time period
+- `current_active::Dict{Int64, Float64}`: Current active power values for generators
+- `current_reactive::Dict{Int64, Float64}`: Current reactive power values for generators
 - `search_parameters::Dict{Symbol, Any}`: Dictionary containing the global data dictionary for our search model
 - `time_period::Int64`: The current time period for which to generate new scenarios
 - `scenarios_to_generate::Int64`: Number of new scenarios to generate (default 15)
-- `subset_percentage::Float64`: Percentage of generators to modify in each new scenario (default 0.3, currently unused)
+- `core_percentage::Float64`: Percentage of generators that stay the same for all scenarios in a time period (default 0.3)
+- `auxiliary_percentage::Float64`: Percentage of generators that are reselected and modified per-scenario (default 0.1)
 - `method_choice::Int64`: Parameter passed into delta_AC which dictates how the maximum delta is calculated
     - 1: Stochastic variation (default)
     - 2: Dynamic Gap variation
     - 3: Temporal Smoothing (not implemented, defaults to stochastic)
 - `up_probability::Float64`: Probability of increasing generator values rather than decreasing (default 0.3)
+- `stable_gens::Vector{Vector{Int64}}`: A 2d vector containing a subset of generators that will remain the same for a given scenario
+over all time periods (default to empty array)
 
 # Returns
 - `new_scenarios::Vector{Tuple{Dict{Int64, Float64}, Dict{Int64, Float64}}}`: 
@@ -415,83 +438,89 @@ new active and reactive powers.
 function generate_new_scenarios_subset_AC(current_active::Dict{Int64, Float64}, current_reactive::Dict{Int64, Float64}, search_parameters::Dict{Symbol, Any},
                                          time_period::Int64; 
                                          scenarios_to_generate::Int64=15,
-                                         subset_percentage::Float64=0.3, 
+                                         core_percentage::Float64=0.3, auxiliary_percentage::Float64=0.1,
                                          method_choice::Int64=1,
-                                         up_probability::Float64=0.3)
+                                         up_probability::Float64=0.3, stable_gens::Union{Vector{Vector{Int64}}, Nothing}=nothing)
     
     data = search_parameters[:data]
-    core_generators = 0.2 # Generators that are commonly modified across scenarios
-    auxiliary_generators = 0.1 # Subset of new generators that will be different per-scenario
 
     all_generators = collect(keys(current_active))
     n_generators = length(all_generators)
     
-    n_to_modify_core = max(1, round(Int, n_generators * core_generators))
-    n_to_modify_auxiliary = max(1, round(Int, n_generators * auxiliary_generators))
-    
+    n_to_modify_core = max(1, round(Int, n_generators * core_percentage))
+    n_to_modify_auxiliary = max(1, round(Int, n_generators * auxiliary_percentage))
+
     core_generators_to_modify = rand(all_generators, n_to_modify_core)
     
     random_scenarios = Vector{Tuple{Dict{Int64, Float64}, Dict{Int64, Float64}}}()
 
-    for scenario_idx in 1:scenarios_to_generate
+    for scenario in 1:scenarios_to_generate
+
+        # Exempt generators designated to stay the same across periods for each scenario
+        remaining_gens = isnothing(stable_gens) ? all_generators : setdiff(all_generators, stable_gens[scenario])
+        core_subset = isnothing(stable_gens) ? nothing : intersect(core_generators_to_modify, remaining_gens)
+
         new_active = copy(current_active)
         new_reactive = copy(current_reactive)
-        # this set may intersect with our core generators???
-        auxiliary_generators_to_modify = rand(all_generators, n_to_modify_auxiliary)
+        # this set may intersect with our core generators
+        auxiliary_generators_to_modify = rand(remaining_gens, n_to_modify_auxiliary)
 
         variation_percent = delta_AC(search_parameters, method_choice, time_period)
         
-        # Modify core generators
-        for gen_id in core_generators_to_modify
-            # Modify active power
-            current_p = current_active[gen_id]
-            max_p_variation = current_p * variation_percent
-            p_variation = rand() * max_p_variation
-            
-            new_p = if rand() < up_probability
-                current_p + p_variation
-            else
-                current_p - p_variation
+        # Modify core generators, so long as they aren't overidden as stable gens for this scenario
+        if(!isnothing(core_subset))
+            for gen_id in core_subset
+                # Modify active power
+                current_p = current_active[gen_id]
+                max_p_variation = current_p * variation_percent
+                p_variation = rand() * max_p_variation
+                
+                new_p = if rand() < up_probability
+                    current_p + p_variation
+                else
+                    current_p - p_variation
+                end
+                
+                pmin = data["gen"][string(gen_id)]["pmin"]
+                pmax = data["gen"][string(gen_id)]["pmax"]
+                new_active[gen_id] = clamp(new_p, pmin, pmax)
+                
+                
+                # Modify reactive power - ensure we can meet reactive demand
+                    current_q = current_reactive[gen_id]
+                    qmin = data["gen"][string(gen_id)]["qmin"]
+                    qmax = data["gen"][string(gen_id)]["qmax"]
+                    
+                    # Use larger variation for reactive power and bias toward demand requirements
+                    max_q_variation = max(abs(current_q) * variation_percent, abs(qmax - qmin) * 0.1)
+                    q_variation = rand() * max_q_variation
+                    
+                    # Get reactive demand info to bias generation
+                    reactive_demand_total = get(search_parameters, :total_reactive_demand, [0.0])[time_period]
+                    reactive_gen_total = get(search_parameters, :total_reactive_generation, [0.0])[time_period]
+                    
+                    # Bias toward meeting reactive demand
+                    reactive_bias = 0.5
+                    if abs(reactive_demand_total) > 0.001
+                        if reactive_gen_total < reactive_demand_total
+                            # Need more positive reactive power
+                            up_probability_q = up_probability + reactive_bias
+                        else
+                            # Need less reactive power
+                            up_probability_q = up_probability - reactive_bias
+                        end
+                    else
+                        up_probability_q = 0.5  # No bias if no significant reactive demand
+                    end
+                    
+                    new_q = if rand() < clamp(up_probability_q, 0.1, 0.9)
+                        current_q + q_variation
+                    else
+                        current_q - q_variation
+                    end
+                    
+                    new_reactive[gen_id] = clamp(new_q, qmin, qmax)
             end
-            
-            pmin = data["gen"][string(gen_id)]["pmin"]
-            pmax = data["gen"][string(gen_id)]["pmax"]
-            new_active[gen_id] = clamp(new_p, pmin, pmax)
-            
-            # Modify reactive power - ensure we can meet reactive demand
-            # current_q = current_reactive[gen_id]
-            # qmin = data["gen"][string(gen_id)]["qmin"]
-            # qmax = data["gen"][string(gen_id)]["qmax"]
-            
-            # # Use larger variation for reactive power and bias toward demand requirements
-            # max_q_variation = max(abs(current_q) * variation_percent, abs(qmax - qmin) * 0.1)
-            # q_variation = rand() * max_q_variation
-            
-            # # Get reactive demand info to bias generation
-            # reactive_demand_total = get(search_parameters, :total_reactive_demand, [0.0])[time_period]
-            # reactive_gen_total = get(search_parameters, :total_reactive_generation, [0.0])[time_period]
-            
-            # # Bias toward meeting reactive demand
-            # reactive_bias = 0.5
-            # if abs(reactive_demand_total) > 0.001
-            #     if reactive_gen_total < reactive_demand_total
-            #         # Need more positive reactive power
-            #         up_probability_q = up_probability + reactive_bias
-            #     else
-            #         # Need less reactive power
-            #         up_probability_q = up_probability - reactive_bias
-            #     end
-            # else
-            #     up_probability_q = 0.5  # No bias if no significant reactive demand
-            # end
-            
-            # new_q = if rand() < clamp(up_probability_q, 0.1, 0.9)
-            #     current_q + q_variation
-            # else
-            #     current_q - q_variation
-            # end
-            
-            # new_reactive[gen_id] = clamp(new_q, qmin, qmax)
         end
 
         # Modify auxiliary generators
@@ -512,35 +541,36 @@ function generate_new_scenarios_subset_AC(current_active::Dict{Int64, Float64}, 
             new_active[gen_id] = clamp(new_p, pmin, pmax)
             
             # Reactive power variation with demand bias
-            #     current_q = current_reactive[gen_id]
-            #     qmin = data["gen"][string(gen_id)]["qmin"]
-            #     qmax = data["gen"][string(gen_id)]["qmax"]
+                current_q = current_reactive[gen_id]
+                qmin = data["gen"][string(gen_id)]["qmin"]
+                qmax = data["gen"][string(gen_id)]["qmax"]
 
-            #     max_q_variation = max(abs(current_q) * variation_percent, abs(qmax - qmin) * 0.05)
-            #     q_variation = rand() * max_q_variation
+                max_q_variation = max(abs(current_q) * variation_percent, abs(qmax - qmin) * 0.05)
+                q_variation = rand() * max_q_variation
 
-            #     # Apply same reactive demand bias
-            #     reactive_demand_total = get(search_parameters, :total_reactive_demand, [0.0])[time_period]
-            #     reactive_gen_total = get(search_parameters, :total_reactive_generation, [0.0])[time_period]
+                # Apply same reactive demand bias
+                reactive_demand_total = get(search_parameters, :total_reactive_demand, [0.0])[time_period]
+                reactive_gen_total = get(search_parameters, :total_reactive_generation, [0.0])[time_period]
 
-            #     reactive_bias = 0.3  # Less bias for auxiliary generators
-            #     if abs(reactive_demand_total) > 0.001
-            #         if reactive_gen_total < reactive_demand_total
-            #             up_probability_q = up_probability + reactive_bias
-            #         else
-            #             up_probability_q = up_probability - reactive_bias
-            #         end
-            #     else
-            #         up_probability_q = 0.5
-            #     end
+                reactive_bias = 0.3  # Less bias for auxiliary generators
+                if abs(reactive_demand_total) > 0.001
+                    if reactive_gen_total < reactive_demand_total
+                        up_probability_q = up_probability + reactive_bias
+                    else
+                        up_probability_q = up_probability - reactive_bias
+                    end
+                else
+                    up_probability_q = 0.5
+                end
 
-            #     new_q = if rand() < clamp(up_probability_q, 0.1, 0.9)
-            #         current_q + q_variation
-            #     else
-            #         current_q - q_variation
-            #     end
+                new_q = if rand() < clamp(up_probability_q, 0.1, 0.9)
+                    current_q + q_variation
+                else
+                    current_q - q_variation
+                end
 
-            #     new_reactive[gen_id] = clamp(new_q, qmin, qmax)
+                new_reactive[gen_id] = clamp(new_q, qmin, qmax)
+            
         end
         
         push!(random_scenarios, (new_active, new_reactive))
@@ -730,7 +760,6 @@ function test_feasibility_AC(factory::AbstractMPOPFModelFactory, path::Vector{In
                 fix(model.model[:qg][1, gen_id], q_value, force=true)
             end
             
-            set_time_limit_sec(model.model, 2) # If its evaluating more than 2 seconds its probably lost
             optimize!(model.model)
             status = termination_status(model.model)
             set_prop!(graph, node, :evaluated, true)

@@ -1,10 +1,4 @@
 using Graphs, MetaGraphs, Gurobi, JuMP
-
-#=
-Refer to test_feasibility_AC when looking to modify how solutions are tested for feasability.
-line 512 - Experiment on reactive power
-=#
-
 #=
 - return actual models used in final solution
     - compare P, Q, V, theta from opt. model and solved model (plot)
@@ -759,7 +753,7 @@ function test_feasibility_AC(factory::AbstractMPOPFModelFactory, path::Vector{In
             for (gen_id, q_value) in reactive_values
                 fix(model.model[:qg][1, gen_id], q_value, force=true)
             end
-            
+
             optimize!(model.model)
             status = termination_status(model.model)
             set_prop!(graph, node, :evaluated, true)

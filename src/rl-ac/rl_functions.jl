@@ -50,9 +50,9 @@ end
     - `model::AbstractMPOPFModel`: A bus network model we want to make optimizations on
     - `reward::Float64`
 """
-Base.@kwdef mutable struct BusEnv <: AbstractEnv
+Base.@kwdef mutable struct BusEnv(m::AbstractMPOPFModel) <: AbstractEnv
 
-    model::AbstractMPOPFModel
+    model::AbstractMPOPFModel = m
 
     reward::Float64
 

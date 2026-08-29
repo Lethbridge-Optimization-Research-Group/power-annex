@@ -14,23 +14,8 @@ RLBase.test_runnable!(env)
 
 run(RandomPolicy(action_space(env)), env, StopAfterNEpisodes(1000))
 
-hook = TotalRewardPerEpisode()
-
-run(RandomPolicy(action_space(env)), env, StopAfterNEpisodes(1000), hook)
+run(RandomPolicy(action_space(env)), env, StopAfterNEpisodes(1000), TotalRewardPerEpisode())
 
 using Plots
 
 plot(hook.rewards)
-
-
-function training_loop(env::BusEnv)
-    # Reset environment
-    # Observe initial state
-    # For each step: 
-        # select an action from current policy
-        # apply it to the environment model
-        # compute reward
-        # observe the next state and discounting
-        # update policy after desired number of steps
-    # After training, we can benchmark the agent against ipopt
-end

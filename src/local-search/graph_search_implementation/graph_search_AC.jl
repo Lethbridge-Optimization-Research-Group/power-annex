@@ -7,9 +7,15 @@ using Graphs, MetaGraphs, Gurobi, JuMP
 =#
 
 #=
-- uncomment reactive fixing constraint
+- Reactive power fixing is commented out during feasibility checking. It might
+yield better results on average, but that's tentative. Experiment with/without it
+
 - reintroduce checking ramp limits before adding edges
 - double check logic for additional reactive demand scenarios
+- try to change how the largest period is handled during scenario
+perturbation. I suspect one issue comes from constantly perturbing
+this time period lower when it is already quite optimal to begin with
+according to ipopt
 =#
 
 """
@@ -183,7 +189,9 @@ function AC_graph_search(data::Dict{String, Any}, factory::ACMPOPFSearchFactory,
 
         # cross_period_gens will contain a randomized subset of generators for each
         # Scenario which will not see modification across time periods to prevent
-        # otherwise feasible scenarios from flip flopping too much outside of feasibility
+        # otherwise feasible scenarios from flip flopping too much outside of feasibility.
+        # The hope is that if we find a good feasible space, we can continue convergence
+        # without leaving the local pocket.
         cross_period_gens = Vector{Vector{Int64}}(undef, scenario_count)
         all_generators = collect(keys(current_active_values[1]))
         n_generators = length(all_generators)
@@ -750,10 +758,11 @@ function test_feasibility_AC(factory::AbstractMPOPFModelFactory, path::Vector{In
                 fix(model.model[:pg][1, gen_id], p_value, force=true)
             end
             
+            #=
             for (gen_id, q_value) in reactive_values
                 fix(model.model[:qg][1, gen_id], q_value, force=true)
             end
-
+=#
             optimize!(model.model)
             status = termination_status(model.model)
             set_prop!(graph, node, :evaluated, true)

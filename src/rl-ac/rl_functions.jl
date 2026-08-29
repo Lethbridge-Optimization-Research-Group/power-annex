@@ -27,7 +27,7 @@ extend it to take a different AC-based model factory as long as you change the m
 - `date::String`: Optional argument to specify the date you want to mimic the demands of from the public data we have (yyyy-mm-dd)
 
 # Returns
-- `model::ACMPOPFSearchModel`: A JuMP model that has been
+- `model::ACMPOPFSearchModel`: A JuMP SearchModel initialized with our specifications
 """
 function init_model(model_factory::ACMPOPFSearchFactory, periods::Int64, output_dir::String; date::String = "2025-10-01")::AbstractMPOPFModel
     data = PowerModels.parse_file(model_factory.file_path)
@@ -60,7 +60,6 @@ Base.@kwdef mutable struct BusEnv <: AbstractEnv
 
     objective::Float64
     violations::Float64
-    reference_objective::Float64
 end
 
 """
@@ -111,17 +110,18 @@ end
 
 # We can create a continuous space representing the states we care about like generation.
 # Alternatively, we can make a data structure with many of these spaces representing different values.
-# Maybe one is used for generation, one for the objective cost, one for 
+# Maybe one is used for generation, one for the objective cost, and one for demand
 function RLBase.state_space(env::BusEnv) 
-    # return ArraySpace(Float64, dimensions)
-    error("Not implemented")
+    
+    gens = env.model
+    return ArraySpace(Float64, gens, params)
 end
 
 # Return the desired state values from the model
 # maybe this looks like a 5 column, n-bus row matrix, with each column being a data point like voltage
 # but if our agent only cares about generation, I can instead return only those values, then pull the feasibility from the env
 # separately to inform policy in an action. Something like a 3xn matrix, with bus_id, pg, qg
-function RLBase.state(env::BusEnv, ::Observation, ::DefaultPlayer) # Not sure what default player is, but its madatory as per the package
+function RLBase.state(env::BusEnv, ::Observation)
     error("Not implemented")
 end
 

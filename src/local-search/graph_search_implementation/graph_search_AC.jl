@@ -202,12 +202,38 @@ function AC_graph_search(data::Dict{String, Any}, factory::ACMPOPFSearchFactory,
             cross_period_gens[s] = rand(all_generators, n_to_modify)
         end
 
+        # Find and record the period with the current lowest generation values
+        if(iteration > 1)
+            lowest_total::Float64 = sum(values(current_active_values[1]))
+            lowest_t = 1
+
+            for t in 2:time_periods
+                current_total = sum(values(current_active_values[t]))
+                if(current_total < lowest_total)
+                    lowest_total = current_total
+                    lowest_t = t
+                end
+            end
+            min_gen_values::Tuple{Dict{Int64, Float64}, Dict{Int64, Float64}} = (deepcopy(current_active_values[lowest_t]), 
+                                                                                deepcopy(current_reactive_values[lowest_t]))
+        end
+
         # Generate new scenarios for each time period
         for t in 1:time_periods
             scenarios_for_period =  generate_new_scenarios_subset_AC(current_active_values[t], 
                                                                    current_reactive_values[t],
                                                                    search_parameters, t; scenarios_to_generate = scenario_count, 
                                                                    stable_gens = cross_period_gens)
+
+            # If current demand is lower than our lowest generation, it is safe to 
+            # copy our lowest period generation values as a potential solution.
+            # This lowest period should already be verified as feasible, acting as a safety fallback
+            # and hopefully creating better time-linkage since more periods share generation profiles.
+            if(iteration > 1)
+                if(sum(values(active_demands[t])) < lowest_total)
+                    push!(scenarios_for_period, min_gen_values)
+                end
+            end
 
             tested_scenarios, scenario_violations = test_scenarios_AC(data, factory, 
                                                                      active_demands[t], 
@@ -417,8 +443,8 @@ the given active values of generators. This is a key part of the local search po
 where nearby scenarios are created to explore the solution space.
 
 # Arguments
-- `current_active::Dict{Int64, Float64}`: Current active power values for generators
-- `current_reactive::Dict{Int64, Float64}`: Current reactive power values for generators
+- `current_active::Dict{Int64, Float64}`: All active power values for generators this time period
+- `current_reactive::Dict{Int64, Float64}`: All reactive power values for generators this time period
 - `search_parameters::Dict{Symbol, Any}`: Dictionary containing the global data dictionary for our search model
 - `time_period::Int64`: The current time period for which to generate new scenarios
 - `scenarios_to_generate::Int64`: Number of new scenarios to generate (default 15)
@@ -609,7 +635,6 @@ function generate_new_scenarios_subset_AC(current_active::Dict{Int64, Float64}, 
     #         push!(random_scenarios, (new_active, new_reactive))
     #     end
     # end
-    println(random_scenarios[1])
     
     return random_scenarios
 end
@@ -758,11 +783,10 @@ function test_feasibility_AC(factory::AbstractMPOPFModelFactory, path::Vector{In
                 fix(model.model[:pg][1, gen_id], p_value, force=true)
             end
             
-            #=
             for (gen_id, q_value) in reactive_values
                 fix(model.model[:qg][1, gen_id], q_value, force=true)
             end
-=#
+
             optimize!(model.model)
             status = termination_status(model.model)
             set_prop!(graph, node, :evaluated, true)

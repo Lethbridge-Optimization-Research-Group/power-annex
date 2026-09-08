@@ -8,7 +8,7 @@ factory = ACMPOPFSearchFactory(matpower_case_path, Ipopt.Optimizer)
 time_periods::Int64 = 24
 output_dir = "src/rl-ac/CSV"
 
-environment = BusEnv(init_model(factory, time_periods, output_dir; date="2025-10-04"))
+environment = EcoDispatchEnv(init_model(factory, time_periods, output_dir; date="2025-10-04"))
 
 RLBase.test_runnable!(env)
 

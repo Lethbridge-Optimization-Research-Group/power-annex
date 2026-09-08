@@ -12,8 +12,8 @@ My thoughts are: Try experimenting recreating a solo model, and once you have a 
 
 This file is used to manage the ReinforcementLearning package's interface. It provides several abstractions that need overriding and defining to use, so this file does just that.
 
-**BusEnv(::ACMPOPFSearchModel)**  
+**EcoDispatchEnv(::ACMPOPFSearchModel)**  
 - This struct is the most basic block of our RL environment. It provides all of the data we need in order to make observations and suggest improvements. You can then assign reward to the environment space (Required by the RL package) based on inverse cost for example (lower cost = higher reward). This environment is unfinished
 
 **Init_model(factory, periods, output_dir)**
-- There is documentation above where this function is defined in-file, but essentially you need only call **BusEnv(init_model(factory, periods, output_dir; date))** to create the environment and set its model. The date is pretty optional, most days of the year have similar enough demand profiles to not make a major difference. This is unfinished and may not be necessary even...
+- There is documentation above where this function is defined in-file, but essentially you need only call **EcoDispatchEnv(init_model(factory, periods, output_dir; date))** to create the environment and set its model. The date is pretty optional, most days of the year have similar enough demand profiles to not make a major difference. This is unfinished and may not be necessary even...

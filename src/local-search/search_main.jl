@@ -10,6 +10,7 @@ but when assigning file paths to below variables, the are relative to the enviro
 =#
 
 # This file is an example for how to run GraphSearch and compare to a standard local-search MPOPF
+# Case 118 and higher can take up to 700s to complete, fair warning.
 
 matpower_file_path = "src/cases/case14.m"
 
@@ -62,27 +63,8 @@ optimize_model(search_model_AC)
 
 global info_AC = AC_graph_search(data, search_factory_AC, active_demands_AC, reactive_demands_AC, ramping_data_AC, t; max_it = 7)
 
-optimal_cost = objective_value(search_model_AC.model)
-graph_cost = info_AC[:cost]
-
-#=
-for x in info[:cost_history]
-    println(x, ',')
-end
-println()
-for x in info[:time_vec]
-    println(x, ',')
-end
-=#
-#=
-percent_decrease = costs ./ costs[1] .* 100
-plot(percent_decrease,
-            xlabel="Iteration",
-            ylabel="% of initial cost",
-            title="Cost Decrease Over Iterations",
-            linewidth=2,
-            legend=false)
-=#
+# optimal_cost = objective_value(search_model_AC.model)
+# graph_cost = info_AC[:cost]
 
 #=
 global optimal_sum = 0

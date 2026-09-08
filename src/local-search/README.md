@@ -61,12 +61,12 @@ PowerModels.calc_thermal_limits!(data)
     - 1: Nodes in the shortest path are now marked after evaluation so they aren't re-evaluated during subsequent iterations or if infeasible nodes are removed and new ones are interchanged into the path
     - 2: It has been clarified that the reactive constraint only needs to be added as a JuMP variable for modification of the power variable (S). We don't have additional costs/ramping/vector-perturbing to worry about since elements of a power grid in real life can inject reactive power almost freely. (It doesn't cost effort to make imaginary power the same way it does for real)
     - 3: The max_it argument in graph_search_AC is trivial if you are familiar with the algorithm, but it should be known that since the current implementation runs into **severe** slowdown during later iterations, it is necessary to limit it to only ~ 1-5 runs, otherwise it could calculate for an hour and return no result
-    - 4: Swapped generator fixing across scenarios, to instead be the same across time periods as a temporal linkage attempt
-    - 5: Added a fallback + low cost option to applicable scenarios during local node generation. This takes the previously found lowest cost/generation period which is known to be feasible, and adds it as an option in the graph to any time periods with demands lower than said node's production. Of all the changes, this has had a noticably positive impact. I've run up to 7 iterations now in a run, with notably less infeasible models removed from our node graph, which ended in a cost of 1.71e5, vs Ipopt's usual 1.65-1.66e5 (this is close compared to prior attempts). Tests so far have been conducted on case 14 only for reference.
+    - 4: Swapped generator fixing across scenarios, to instead be the same across time periods as a temporal linkage attempt. Small but measurable speedup and cost convergence I was able to graph.
+    - 5: Added a fallback + low cost option to applicable scenarios during local node generation. This takes the previously found lowest cost/generation period which is known to be feasible, and adds it as an option in the graph to any time periods with demands lower than said node's production. Noticably positive impact. I've run up to 7 iterations now in a run, with notably less infeasible model violations (to the tone of 200 less in case 14).
 
 - After running the function, you should now have a solution which is feasible in AC space and you only need compare statistics from the return value.
 
-- The solution key returns a dictionary with the final generation values and node cost at each time period. So  
+- The solution key returns a dictionary with the final generation values and node cost at each time period. So:  
 `info[:solution][1][:active_generator_values]`  
 Returns a dictionary of time period 1's optimal solution.
 
@@ -81,6 +81,8 @@ At this point you know how to use the graph search algorithm, the next step is l
 As well, be mindful that while Julia is a fast and smart language, you can still help the compiler optimize your code by giving everything types as much as possible (Ex. `foo::Int64`, `bar::String`), with the added benefit of helping other programmers be able to work with your data easier. 
 
 That was a long section, if you made it this far then thanks for reading, I hope it helps!
+- I should also add: I may not have had the biggest impact on the project, but I've spent so many hours reading this code. If you as a future reader have questions I'd love to help however I can.  
+Contact me at koevortl@uleth.ca
 
 ## Graphing Results
 Sometimes you may want to create graphs of the result from the optimization for demo purposes or to visualize how any modifications made to the algorithm performed. Helpful tools like the Plots package or PlotlyJS allow in-editor graphs to be made easily, if there is something lacking from a graph or a new kind of graph desired, look up the library and consider pairing it with Dataframes for ease of use. 

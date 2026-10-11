@@ -185,13 +185,18 @@ function solve_model_ac!(ref, model)
                )
 
     # Solve the optimization problem
-    stats = @timed optimize!(model);
+  # Solve the optimization problem
+stats = @timed optimize!(model);
 
-    # check status and collect the optimal solution
-    result = Dict{Symbol, Any}()
-    result[:status] = termination_status(model)
-    result[:cost] = objective_value(model)
-    result[:time_sec] = stats.time
+# Create result dictionary
+result = Dict{Symbol, Any}()
+result[:status] = termination_status(model)
+result[:cost] = objective_value(model)
+result[:time_sec] = stats.time
+result[:pg] = Dict(i => value(pg[i]) for i in keys(ref[:gen]))
+# Store generator outputs
+result[:pg] = Dict(i => value(pg[i]) for i in keys(ref[:gen]))
+result[:qg] = Dict(i => value(qg[i]) for i in keys(ref[:gen]))
 
     # create dictionary for the power amount flowing on lines
     result[:p_arcs] = Dict{Tuple{Int64, Int64, Int64}, Float64}()

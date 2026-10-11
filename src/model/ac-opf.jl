@@ -25,7 +25,7 @@ using JuMP
 # ----------------
 powermodels_path = joinpath(dirname(pathof(PowerModels)), "..")
 
-file_name = "$(powermodels_path)/test/data/matpower/case5.m"
+file_name = "/Users/shidratulmuntaha/power-annex/.github/workflows/cases/case39.m"
 # note: change this string to modify the network data that will be loaded
 
 # load the data file

@@ -1,7 +1,7 @@
 #= configuration variables =#
-CASE_DIR="../../data/"
-CASE_FILE="case1354pegase.m"
-ROOT_DIR="/home/rbenkocz/proj/power-flow/src/power-annex/"
+CASE_DIR = "/Users/shidratulmuntaha/power-annex/.github/workflows/cases/"
+CASE_FILE = "case39.m"
+ROOT_DIR = "/Users/shidratulmuntaha/power-annex/"
 
 #= ***********
 include first the files with the needed functions
@@ -19,6 +19,7 @@ ref = read_case(CASE_DIR * CASE_FILE)
 model = init_ac()
 
 result = solve_model_ac!(ref, model)
+println("PG = ", result[:pg])
 
 # Check that the solver terminated without an error
 println("The solver termination status is $(result[:status])")

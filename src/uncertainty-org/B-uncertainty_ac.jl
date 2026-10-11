@@ -9,8 +9,8 @@
 
 
 #= configuration variables =#
-CASE_DIR = "/Users/shidratulmuntaha/power-annex/.github/workflows/"
-CASE_FILE = "case14.m"
+CASE_DIR = "/Users/shidratulmuntaha/power-annex/.github/workflows/cases/"
+CASE_FILE = "case30.m"
 ROOT_DIR = "/Users/shidratulmuntaha/power-annex/"
 
 #= ***********

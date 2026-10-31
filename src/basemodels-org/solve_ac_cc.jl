@@ -9,7 +9,7 @@
 using PowerModels
 using Ipopt
 using JuMP
-
+using Printf
 # Include util_cc.jl before calling this function.
 # The caller supplies a fresh model and the prepared bounds and tolerances.
 # Baseline comparison and user inputs belong in the test file.
@@ -82,27 +82,30 @@ function solve_model_ccac!(model, ref, uncertainty, bus_bounds, bus_epsilon)
         @constraint(model, va[bus_id] == 0)
     end
     ###############################################################################
-    # 13. Add the Objective Function
-    ###############################################################################
+###############################################################################
+# 13. Add the Objective Function
+###############################################################################
 
-    # Identify the from-terminal arc of each HVDC line.
-    from_idx = Dict(arc[1] => arc for arc in ref[:arcs_from_dc])
+# Identify the from-terminal arc of each HVDC line.
+from_idx = Dict(arc[1] => arc for arc in ref[:arcs_from_dc])
 
-    # Minimize generation and HVDC operating costs.
-    @objective(model, Min,
-        sum(
-            gen["cost"][1] * pg[id]^2 +
-            gen["cost"][2] * pg[id] +
-            gen["cost"][3]
-            for (id, gen) in ref[:gen]
-        ) +
-        sum(
-            line["cost"][1] * p_dc[from_idx[id]]^2 +
-            line["cost"][2] * p_dc[from_idx[id]] +
-            line["cost"][3]
-            for (id, line) in ref[:dcline]
-        )
+# Selected renewable generators have zero assumed operating cost.
+# Keep the costs of the other generators and HVDC lines.
+@objective(model, Min,
+    sum(
+        gen["cost"][1] * pg[id]^2 +
+        gen["cost"][2] * pg[id] +
+        gen["cost"][3]
+        for (id, gen) in ref[:gen]
+        if !haskey(uncertainty[:gen], id)
+    ) +
+    sum(
+        line["cost"][1] * p_dc[from_idx[id]]^2 +
+        line["cost"][2] * p_dc[from_idx[id]] +
+        line["cost"][3]
+        for (id, line) in ref[:dcline]
     )
+)
     ###############################################################################
     # 14. Add AC Branch Equations and Limits
     ###############################################################################
@@ -202,37 +205,83 @@ function solve_model_ccac!(model, ref, uncertainty, bus_bounds, bus_epsilon)
         bounds = bus_bounds[i]
         eps = bus_epsilon[i]
        
-
-        Pg = @expression(model,
-            sum(pg[g] for g in ref[:bus_gens][i]; init = 0.0)
-        )
+##old constraints
+#         Pg = @expression(model,
+#             sum(pg[g] for g in ref[:bus_gens][i]; init = 0.0)
+#         )
 
        
-###33change
+# ###33change
 
-        @constraint(model, Pg - eps["p_minus"] <= bounds["a1"])
-        @constraint(model, Pg + eps["p_plus"] >= bounds["a2"])
+#         @constraint(model, Pg - eps["p_minus"] <= bounds["a1"])
+#         @constraint(model, Pg + eps["p_plus"] >= bounds["a2"])
+
+
         
-    end
+#     end
 
-    # Show Ipopt's diagnostic output.
-    set_optimizer_attribute(model, "print_level", 5)
+##new constraints
 
-    optimize!(model)
+##suppose the study bus generates 8 units and uses 5 units locally. That leaves 3 units for the network.Is uncertain generation minus uncertain demand close enough to those 3 units at least 95% of the time?
+##F = net outgoing AC flows + net outgoing DC flows + shunt consumption + deterministic demand − deterministic generation
 
-    ###############################################################################
-    # 19. Return the Solution Dictionary
-    ###############################################################################
 
-    # Store an objective only when the solver reports success.
-    result = Dict{Symbol, Any}(
-        :status => termination_status(model),
-        :objective => nothing
+# # Network injection that must be supplied by uncertain generation
+# # # minus uncertain demand.
+F = @expression(model,
+    sum(p[a] for a in ref[:bus_arcs][i]; init = 0.0) +
+    sum(p_dc[a] for a in ref[:bus_arcs_dc][i]; init = 0.0) +
+    sum(
+        ref[:shunt][s]["gs"]
+        for s in ref[:bus_shunts][i]; init = 0.0
+    ) * vm[i]^2 +
+    sum(
+        ref[:load][d]["pd"]
+        for d in ref[:bus_loads][i]
+        if !haskey(uncertainty[:load], d); init = 0.0
+    ) -
+    sum(
+        pg[g]
+        for g in ref[:bus_gens][i]
+        if !haskey(uncertainty[:gen], g); init = 0.0
     )
+)
 
-    if result[:status] in (JuMP.MOI.OPTIMAL, JuMP.MOI.LOCALLY_SOLVED)
-        result[:objective] = objective_value(model)
-    end
+@constraint(model, F - eps["p_minus"] <= bounds["a1"])
+@constraint(model, F + eps["p_plus"] >= bounds["a2"])
 
-    return result
+        end
+        
+
+   # Show Ipopt's diagnostic output.
+   set_optimizer_attribute(model, "print_level", 5)
+
+   optimize!(model)
+
+    ###############################################################################
+  ###############################################################################
+# 19. Return the Solution Dictionary
+###############################################################################
+
+result = Dict{Symbol, Any}(
+    :status => termination_status(model),
+    :objective => nothing,
+    :pg => nothing,
+    :vm => nothing,
+    :va => nothing
+)
+
+# Save values only after a successful solve.
+if result[:status] in (JuMP.MOI.OPTIMAL, JuMP.MOI.LOCALLY_SOLVED)
+    result[:objective] = objective_value(model)
+
+    # Active power for each generator.
+    result[:pg] = Dict(id => value(pg[id]) for id in keys(ref[:gen]))
+
+    # Voltage magnitude and angle for each bus.
+    result[:vm] = Dict(i => value(vm[i]) for i in keys(ref[:bus]))
+    result[:va] = Dict(i => value(va[i]) for i in keys(ref[:bus]))
+end
+
+return result
 end

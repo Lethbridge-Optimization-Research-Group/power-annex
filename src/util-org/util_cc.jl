@@ -10,7 +10,7 @@ using PowerModels
 using Ipopt
 using JuMP
 using Distributions
-
+using QuadGK
 ###############################################################################
 # 1. Read and Process the Case
 ###############################################################################
@@ -54,42 +54,34 @@ end
 # 4. Construct the Uncertainty Dictionary
 ###############################################################################
 
-# Only selected IDs get entries; generator means come from the baseline.
-function create_uncertainty(ref, baseline_solution, uncertain_load_ids, uncertain_gen_ids)
-    uncertainty = Dict(
-        :load => Dict(),
-        :gen => Dict()
-    )
+# Create dictionaries using sigma values already entered.
+function create_uncertainty(ref, baseline_solution,
+    uncertain_load_ids, uncertain_gen_ids,
+    sigma_pd, sigma_pg)
 
-    # Selected uncertain loads.
-    for id in uncertain_load_ids
-        load = ref[:load][id]
-        println("\nLoad $id — enter sigma in p.u.")
+uncertainty = Dict(:load => Dict(), :gen => Dict())
 
-        uncertainty[:load][id] = Dict(
-            "load_bus" => load["load_bus"],
-            "exp_pd" => load["pd"],
-         
-            "sigma_pd" => read_sigma("Sigma Pd: "),
-            
-        )
-    end
+# Selected load: case demand and supplied sigma.
+for id in uncertain_load_ids
+load = ref[:load][id]
 
-    # Selected uncertain generators.
-    for id in uncertain_gen_ids
-        gen = ref[:gen][id]
-        solution = baseline_solution["gen"][string(id)]
-        println("\nGenerator $id — enter sigma in p.u.")
+uncertainty[:load][id] = Dict(
+"load_bus" => load["load_bus"],
+"exp_pd" => load["pd"],
+"sigma_pd" => sigma_pd
+)
+end
 
-        uncertainty[:gen][id] = Dict(
-            "gen_bus" => gen["gen_bus"],
-            "exp_pg" => solution["pg"],
-          
-            "sigma_pg" => read_sigma("Sigma Pg: "),
-           
-        )
-    end
-    return uncertainty
+# Selected generator: baseline output and supplied sigma.
+for id in uncertain_gen_ids
+uncertainty[:gen][id] = Dict(
+"gen_bus" => ref[:gen][id]["gen_bus"],
+"exp_pg" => baseline_solution["gen"][string(id)]["pg"],
+"sigma_pg" => sigma_pg
+)
+end
+
+return uncertainty
 end
 
 ###############################################################################
@@ -160,7 +152,7 @@ function prepare_bus_uncertainty(uncertainty, uncertain_buses)
         load_ids = uncertain_buses[bus_id][:load]
         gen_ids = uncertain_buses[bus_id][:gen]
 
-        l3oads = [uncertainty[:load][id] for id in load_ids]
+        loads = [uncertainty[:load][id] for id in load_ids]
         gens = [uncertainty[:gen][id] for id in gen_ids]
 
         # Selected uncertain load means.
@@ -211,4 +203,32 @@ function read_tolerances(required)
         minus + plus >= required && return minus, plus
         println("Total is too small. Enter again.")
     end
+end
+
+# Quantile of independent renewable generation minus demand.
+# Generation must have finite lower and upper limits.
+function net_quantile(generation, demand, probability)
+    # Find an interval containing the answer.
+    demand_value = quantile(demand, 1 - probability)
+    low = minimum(generation) - demand_value
+    high = maximum(generation) - demand_value
+
+    for iteration in 1:60
+        middle = (low + high) / 2
+
+        # Probability that generation minus demand is below middle.
+        chance, _ = quadgk(
+            u -> ccdf(demand, quantile(generation, u) - middle),
+            0.0, 1.0;
+            atol = 1e-9, rtol = 1e-8
+        )
+
+        if chance < probability
+            low = middle
+        else
+            high = middle
+        end
+    end
+
+    return (low + high) / 2
 end
